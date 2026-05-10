@@ -1,0 +1,6 @@
+# Unsloth QLoRA fine-tuning for the Gemma judge.
+# Only needed when running scripts in `training/`.
+
+unsloth>=2024.8
+trl>=0.9
+datasets>=2.20
