@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 import traceback
 from datetime import date, datetime
 from pathlib import Path
@@ -139,6 +140,10 @@ def main() -> None:
     ap.add_argument("--skip-transcription", action="store_true",
                     help="Don't download / run Whisper. Just write gold scores. "
                          "Useful for fast metadata import on CPU; re-run on Colab GPU later.")
+    ap.add_argument("--throttle", type=float, default=2.5,
+                    help="Seconds to sleep between Drive downloads to avoid rate limit (default 2.5).")
+    ap.add_argument("--retry-errors", action="store_true",
+                    help="Re-attempt rows currently marked status=error.")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -188,6 +193,11 @@ def main() -> None:
             call = find_or_create_call(link, source_row=sheet_row, metadata=metadata)
             call_id = call["id"]
 
+            # If retrying errors, treat error-state rows as needing transcription
+            if args.retry_errors and call.get("status") == "error":
+                db.update_call(call_id, status="pending", error=None)
+                call["transcript"] = None  # force the transcribe branch below
+
             # Transcribe if not yet done
             if not call.get("transcript") and not args.skip_transcription:
                 try:
@@ -196,11 +206,15 @@ def main() -> None:
                                    language=lang, status="transcribed")
                     stats["transcribed"] += 1
                     print(f"  row {sheet_row}: transcribed ({duration:.0f}s, lang={lang})")
+                    if args.throttle > 0:
+                        time.sleep(args.throttle)
                 except Exception as exc:
                     err = f"{exc.__class__.__name__}: {exc}"
                     db.update_call(call_id, status="error", error=err)
                     stats["errors"] += 1
                     print(f"  row {sheet_row}: TRANSCRIBE FAIL — {err}")
+                    if args.throttle > 0:
+                        time.sleep(args.throttle)  # still throttle on error
             elif call.get("transcript"):
                 stats["skipped_existing_transcript"] += 1
 

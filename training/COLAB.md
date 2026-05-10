@@ -36,7 +36,7 @@ Should show a Tesla T4 with ~15GB free. If "command not found", you didn't set G
 
 ```python
 import getpass, os
-REPO_URL = "https://github.com/YOUR_USER/call-audit.git"  # ← edit
+REPO_URL = "https://github.com/cryptopaglu2408-gif/call-audit"  # ← edit
 TOKEN = getpass.getpass("GitHub PAT (only if private repo, else just press Enter): ").strip()
 if TOKEN:
     REPO_URL = REPO_URL.replace("https://", f"https://{TOKEN}@")

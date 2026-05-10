@@ -62,21 +62,42 @@ def select_rows(
     return out
 
 
-def download_audio(url: str, dest_name: str) -> Path:
-    """Download a public Google Drive file via gdown. Raises on failure."""
+def download_audio(url: str, dest_name: str, max_retries: int = 4) -> Path:
+    """Download a public Google Drive file via gdown.
+
+    Retries with exponential backoff to survive Drive's burst rate limiting,
+    which throws 'Cannot retrieve the public link' after ~25-50 sequential fetches.
+    Total worst-case wait is ~60s before giving up.
+    """
+    import time
     import gdown  # imported lazily so module import stays cheap
 
     file_id = extract_drive_id(url) or url
     out_path = AUDIO_DIR / dest_name
-    result = gdown.download(
-        url=f"https://drive.google.com/uc?id={file_id}",
-        output=str(out_path),
-        quiet=True,
-        fuzzy=True,
+
+    last_err: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            result = gdown.download(
+                url=f"https://drive.google.com/uc?id={file_id}",
+                output=str(out_path),
+                quiet=True,
+                fuzzy=True,
+            )
+            if result is not None and out_path.exists():
+                return out_path
+            last_err = RuntimeError(f"gdown returned no file for {url}")
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+
+        if attempt < max_retries - 1:
+            wait = 4 * (2 ** attempt)  # 4, 8, 16, 32s
+            time.sleep(wait)
+
+    raise RuntimeError(
+        f"gdown failed for {url} after {max_retries} attempts (Drive rate-limited "
+        f"or link not 'Anyone with the link'). Last error: {last_err}"
     )
-    if result is None or not out_path.exists():
-        raise RuntimeError(f"gdown failed for {url} (is the link 'Anyone with the link'?)")
-    return out_path
 
 
 def iter_pending(rows: list[Row]) -> Iterator[Row]:
