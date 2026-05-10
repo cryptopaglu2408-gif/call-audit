@@ -198,8 +198,17 @@ def main() -> None:
                 db.update_call(call_id, status="pending", error=None)
                 call["transcript"] = None  # force the transcribe branch below
 
-            # Transcribe if not yet done
-            if not call.get("transcript") and not args.skip_transcription:
+            # Skip transcription if the value isn't a Drive URL (rare data-entry case)
+            is_drive_url = "drive.google" in link and ingest.extract_drive_id(link) is not None
+            if not is_drive_url and not call.get("transcript"):
+                if call.get("status") != "skipped":
+                    db.update_call(call_id, status="skipped",
+                                   error="Audio Recording File is a bare filename, not a Drive URL")
+                stats.setdefault("skipped_non_url", 0)
+                stats["skipped_non_url"] += 1
+
+            # Transcribe if not yet done (and we have a real Drive URL)
+            elif not call.get("transcript") and not args.skip_transcription:
                 try:
                     text, duration, lang = transcribe_call(call)
                     db.update_call(call_id, transcript=text, duration_seconds=duration,

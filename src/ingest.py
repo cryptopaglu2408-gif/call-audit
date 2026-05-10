@@ -62,18 +62,44 @@ def select_rows(
     return out
 
 
-def download_audio(url: str, dest_name: str, max_retries: int = 4) -> Path:
-    """Download a public Google Drive file via gdown.
+def _download_via_drive_api(file_id: str, out_path: Path) -> Path:
+    """Authenticated Drive download via google-api-python-client.
 
-    Retries with exponential backoff to survive Drive's burst rate limiting,
-    which throws 'Cannot retrieve the public link' after ~25-50 sequential fetches.
-    Total worst-case wait is ~60s before giving up.
+    Bypasses the per-IP anonymous quota that breaks `gdown` after ~30-50 calls.
+    Requires Application Default Credentials — in Colab:
+        from google.colab import auth; auth.authenticate_user()
     """
+    from googleapiclient.discovery import build  # type: ignore
+    from googleapiclient.http import MediaIoBaseDownload  # type: ignore
+
+    service = build("drive", "v3", cache_discovery=False)
+    request = service.files().get_media(fileId=file_id)
+    with open(out_path, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise RuntimeError(f"Drive API returned empty file for id={file_id}")
+    return out_path
+
+
+def download_audio(url: str, dest_name: str, max_retries: int = 4) -> Path:
+    """Download a Google Drive file.
+
+    If env var USE_DRIVE_API=1 is set, uses the authenticated Drive API
+    (recommended on Colab — set up via `google.colab.auth.authenticate_user()`).
+    Otherwise falls back to anonymous gdown with exponential-backoff retry.
+    """
+    import os
     import time
     import gdown  # imported lazily so module import stays cheap
 
     file_id = extract_drive_id(url) or url
     out_path = AUDIO_DIR / dest_name
+
+    if os.getenv("USE_DRIVE_API", "").lower() in {"1", "true", "yes"}:
+        return _download_via_drive_api(file_id, out_path)
 
     last_err: Exception | None = None
     for attempt in range(max_retries):
@@ -95,8 +121,9 @@ def download_audio(url: str, dest_name: str, max_retries: int = 4) -> Path:
             time.sleep(wait)
 
     raise RuntimeError(
-        f"gdown failed for {url} after {max_retries} attempts (Drive rate-limited "
-        f"or link not 'Anyone with the link'). Last error: {last_err}"
+        f"gdown failed for {url} after {max_retries} attempts (Drive anonymous quota "
+        f"likely exhausted). Set USE_DRIVE_API=1 + auth.authenticate_user() to bypass. "
+        f"Last error: {last_err}"
     )
 
 

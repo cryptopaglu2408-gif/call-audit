@@ -52,13 +52,19 @@ if TOKEN:
 ```
 ~3-5 min. Unsloth pulls in the GPU-optimized Gemma kernels.
 
-### Cell 4 — paste credentials
+### Cell 4 — paste credentials + authenticate Google Drive
 
 ```python
 import getpass, os
 os.environ["SUPABASE_URL"] = input("SUPABASE_URL: ").strip()
 os.environ["SUPABASE_KEY"] = getpass.getpass("SUPABASE_KEY (service role): ")
 os.environ["WHISPER_MODEL"] = "small"   # or "medium" — T4 handles it fine
+
+# Authenticate so we can download from Drive without hitting the anonymous quota.
+# A popup will ask you to sign in with the Google account that has access to the audio files.
+os.environ["USE_DRIVE_API"] = "1"
+from google.colab import auth
+auth.authenticate_user()
 ```
 
 ### Cell 5 — Phase 1: transcribe the 358 calls
@@ -66,7 +72,7 @@ os.environ["WHISPER_MODEL"] = "small"   # or "medium" — T4 handles it fine
 ```python
 !python -m training.import_demo_dataset
 ```
-~1 hour for all 358. Already-transcribed rows are skipped if you re-run. If Colab disconnects mid-run, just re-execute this cell.
+~1 hour for all 358. Already-transcribed rows are skipped if you re-run. If Colab disconnects mid-run, just re-execute this cell. The Drive API path bypasses gdown's anonymous quota, so failures should be near-zero.
 
 ### Cell 6 — Phase 2: export to JSONL
 
