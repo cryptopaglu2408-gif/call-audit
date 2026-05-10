@@ -15,6 +15,7 @@ temp_audio/
 
 *.xlsx
 !sample.xlsx
+!Demo Quality Check Form  (Responses).xlsx
 
 .DS_Store
 Thumbs.db
