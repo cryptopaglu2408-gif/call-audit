@@ -57,6 +57,10 @@ def main() -> None:
         load_in_4bit=True,
     )
     tokenizer = get_chat_template(tokenizer, chat_template="gemma")
+    # Resolve the actual EOS token string from its ID — get_chat_template may overwrite
+    # the eos_token attribute with a Llama-style sentinel ('<EOS_TOKEN>') that doesn't
+    # exist in the Gemma vocabulary, causing SFTConfig validation to fail.
+    actual_eos_token = tokenizer.convert_ids_to_tokens(tokenizer.eos_token_id)
 
     model = FastLanguageModel.get_peft_model(
         model,
@@ -100,6 +104,7 @@ def main() -> None:
         train_dataset=ds,
         args=SFTConfig(
             output_dir=str(args.output / "checkpoints"),
+            eos_token=actual_eos_token,  # TRL 0.18.x defaults to a literal sentinel string
             max_length=args.max_seq_length,
             dataset_num_proc=1,  # avoid pickle errors with Unsloth-patched tokenizers
             num_train_epochs=args.epochs,
