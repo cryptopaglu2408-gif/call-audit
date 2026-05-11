@@ -203,11 +203,18 @@ export default function Results() {
   const [scores, setScores]             = useState([])
   const [scoresLoading, setScoresLoading] = useState(false)
   const [search, setSearch]             = useState('')
+  const [rubricOrder, setRubricOrder]   = useState([])
 
   useEffect(() => {
-    supabase.from('calls').select('id, status, created_at, duration_seconds, drive_link, metadata, transcript')
-      .order('created_at', { ascending: false }).limit(500)
-      .then(({ data }) => { setCalls(data || []); setLoading(false) })
+    Promise.all([
+      supabase.from('calls').select('id, status, created_at, duration_seconds, drive_link, metadata, transcript')
+        .order('created_at', { ascending: false }).limit(500),
+      supabase.from('rubrics').select('parameters').eq('is_active', true).limit(1).single(),
+    ]).then(([{ data: c }, { data: r }]) => {
+      setCalls(c || [])
+      if (r?.parameters) setRubricOrder(r.parameters.map(p => p.name))
+      setLoading(false)
+    })
   }, [])
 
   async function selectCall(call) {
@@ -217,8 +224,14 @@ export default function Results() {
     const { data } = await supabase.from('scores')
       .select('parameter, score, max_score, reasoning, rubric_id')
       .eq('call_id', call.id)
-      .order('parameter')
-    setScores(data || [])
+    const sorted = rubricOrder.length
+      ? [...(data || [])].sort((a, b) => {
+          const ai = rubricOrder.indexOf(a.parameter)
+          const bi = rubricOrder.indexOf(b.parameter)
+          return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+        })
+      : (data || [])
+    setScores(sorted)
     setScoresLoading(false)
   }
 
@@ -296,6 +309,14 @@ export default function Results() {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-xl font-black text-slate-900 truncate tracking-tight">{selected.metadata?.filename || 'Call detail'}</h2>
+                  {selected.metadata?.agent_name && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center shrink-0">
+                        <span className="text-white text-[9px] font-bold">{selected.metadata.agent_name.slice(0,2).toUpperCase()}</span>
+                      </div>
+                      <span className="text-sm font-bold text-violet-700">{selected.metadata.agent_name}</span>
+                    </div>
+                  )}
                   <p className="text-xs font-medium text-slate-400 mt-1">
                     {new Date(selected.created_at).toLocaleString('en-AU',{dateStyle:'medium',timeStyle:'short'})}
                     {selected.duration_seconds && ` · ${(selected.duration_seconds/60).toFixed(1)} min`}

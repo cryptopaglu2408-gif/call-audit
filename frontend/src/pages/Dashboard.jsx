@@ -5,7 +5,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   Legend,
 } from 'recharts'
-import { AlertTriangle, SlidersHorizontal, ArrowDownRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { AlertTriangle, SlidersHorizontal, TrendingDown, Phone, Check, Star, Trophy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import KPICard from '../components/KPICard'
 import Spinner from '../components/Spinner'
@@ -13,20 +13,20 @@ import Spinner from '../components/Spinner'
 const STATUS_COLORS = { done: '#10b981', transcribed: '#8b5cf6', pending: '#64748b', error: '#f43f5e' }
 const RANGES = [{ label: '7 days', value: '7d' }, { label: '30 days', value: '30d' }, { label: '90 days', value: '90d' }, { label: 'All time', value: 'all' }]
 
-// ≤50 red · 51–80 yellow · 81–100 green
+// ≤50 red · 51–70 yellow · 71–100 green
 function scoreColor(pct) {
   if (pct <= 50) return '#ef4444'
-  if (pct <= 80) return '#f59e0b'
+  if (pct <= 70) return '#f59e0b'
   return '#10b981'
 }
 function scoreTextClass(pct) {
   if (pct <= 50) return 'text-rose-500'
-  if (pct <= 80) return 'text-amber-500'
+  if (pct <= 70) return 'text-amber-500'
   return 'text-emerald-500'
 }
 function scoreBgClass(pct) {
   if (pct <= 50) return 'bg-rose-50 text-rose-600 border-rose-100'
-  if (pct <= 80) return 'bg-amber-50 text-amber-600 border-amber-100'
+  if (pct <= 70) return 'bg-amber-50 text-amber-600 border-amber-100'
   return 'bg-emerald-50 text-emerald-700 border-emerald-100'
 }
 
@@ -54,12 +54,12 @@ const BarScoreLabel = ({ x, y, width, height, value }) => (
 
 function Card({ title, sub, action, children, className = '' }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-card border border-slate-100 p-6 ${className}`}>
+    <div className={`bg-white/80 backdrop-blur-md rounded-2xl shadow-lg shadow-slate-100/50 border border-slate-100/80 p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-0.5 transition-all duration-300 ${className}`}>
       {(title || action) && (
         <div className="flex items-start justify-between mb-5 gap-3">
           <div>
-            {title && <h2 className="text-sm font-bold text-slate-800">{title}</h2>}
-            {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+            {title && <h2 className="text-sm font-bold text-slate-800 tracking-tight">{title}</h2>}
+            {sub && <p className="text-xs text-slate-400 mt-0.5 font-medium">{sub}</p>}
           </div>
           {action}
         </div>
@@ -81,7 +81,7 @@ function StatusBadge({ status }) {
 
 function RangePicker({ value, onChange }) {
   return (
-    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+    <div className="flex items-center gap-1 bg-slate-100/80 backdrop-blur-sm p-1 rounded-xl border border-slate-200/50">
       {RANGES.map(r => (
         <button key={r.value} onClick={() => onChange(r.value)}
           className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${value === r.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -149,20 +149,20 @@ export default function Dashboard() {
     const callPcts = filteredCalls.map(c => scoreMap[c.id]).filter(Boolean).map(arr => arr.reduce((a,b)=>a+b,0)/arr.length)
     const avgScore = callPcts.length ? Math.round(callPcts.reduce((a,b)=>a+b,0)/callPcts.length*100) : null
 
-    // Performance zones (≤50 / 51-80 / 81-100)
+    // Performance zones (≤50 / 51-70 / 71-100)
     const zones = { red: 0, yellow: 0, green: 0 }
     filteredCalls.forEach(c => {
       const pcts = scoreMap[c.id]
       if (!pcts?.length) return
       const avg = pcts.reduce((a,b)=>a+b,0)/pcts.length*100
       if (avg <= 50) zones.red++
-      else if (avg <= 80) zones.yellow++
+      else if (avg <= 70) zones.yellow++
       else zones.green++
     })
     const zonesData = [
       { name: '≤50% Critical', value: zones.red,    color: '#ef4444' },
-      { name: '51–80% Average', value: zones.yellow, color: '#f59e0b' },
-      { name: '81–100% Good',   value: zones.green,  color: '#10b981' },
+      { name: '51–70% Average', value: zones.yellow, color: '#f59e0b' },
+      { name: '71–100% Good',   value: zones.green,  color: '#10b981' },
     ]
 
     // Daily trend
@@ -180,13 +180,14 @@ export default function Dashboard() {
     }))
 
     // Param averages (for bar + radar)
+    const filteredCallIds = new Set(filteredCalls.map(c => c.id))
     const paramMap = {}
-    scores.filter(s => filteredCalls.some(c=>c.id===s.call_id)).forEach(s => {
+    scores.filter(s => filteredCallIds.has(s.call_id)).forEach(s => {
       if (!paramMap[s.parameter]) paramMap[s.parameter] = []
       paramMap[s.parameter].push(s.score / s.max_score)
     })
     const paramData = Object.entries(paramMap).map(([p, arr]) => ({
-      param:    p.length > 18 ? p.slice(0,16)+'…' : p,
+      param:    p,
       fullName: p,
       Score:    Math.round(arr.reduce((a,b)=>a+b,0)/arr.length*100),
     })).sort((a,b) => a.Score - b.Score)   // ascending so worst at top
@@ -198,9 +199,9 @@ export default function Dashboard() {
     })
 
     // Histogram
-    const allParams = [...new Set(scores.map(s=>s.parameter))].sort()
+    const allParams = [...new Set(scores.filter(s => filteredCallIds.has(s.call_id)).map(s=>s.parameter))].sort()
     const histBuckets = {}
-    scores.forEach(s => {
+    scores.filter(s => filteredCallIds.has(s.call_id)).forEach(s => {
       if (!histBuckets[s.parameter]) histBuckets[s.parameter] = {}
       histBuckets[s.parameter][s.score] = (histBuckets[s.parameter][s.score]||0)+1
     })
@@ -213,23 +214,33 @@ export default function Dashboard() {
 
     // Duration data
     const durationData = filteredCalls.filter(c=>c.duration_seconds).slice(0,60).reverse().map((c,i)=>({call:i+1,min:+(c.duration_seconds/60).toFixed(1)}))
+    const avgDuration  = durationData.length ? +(durationData.reduce((a,b)=>a+b.min,0)/durationData.length).toFixed(1) : null
 
-    return { total, audited, failed, avgScore, zones, zonesData, trendData, paramData, flagged, allParams, histData, durationData }
+    return { total, audited, failed, avgScore, zones, zonesData, trendData, paramData, flagged, allParams, histData, durationData, avgDuration }
   }, [filteredCalls, scores, scoreMap, threshold, histParam])
 
-  const { total, audited, failed, avgScore, zones, zonesData, trendData, paramData, flagged, allParams, histData, durationData } = computed
+  const { total, audited, failed, avgScore, zones, zonesData, trendData, paramData, flagged, allParams, histData, durationData, avgDuration } = computed
+
+  const paramScoreMap = useMemo(() => {
+    const map = {}
+    scores.forEach(s => {
+      if (!map[s.call_id]) map[s.call_id] = {}
+      map[s.call_id][s.parameter] = s.score
+    })
+    return map
+  }, [scores])
 
   if (loading) return <Spinner text="Loading dashboard…" />
 
   const scoredCount = zones.red + zones.yellow + zones.green
 
   return (
-    <div className="min-h-full bg-slate-50">
+    <div className="min-h-full">
       {/* Header */}
-      <div className="bg-white border-b border-slate-100 px-8 py-5 flex items-center justify-between gap-4 sticky top-0 z-10">
+      <div className="bg-white/80 backdrop-blur-md border-b border-slate-100/50 px-8 py-5 flex items-center justify-between gap-4 sticky top-0 z-10">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Showing {filteredCalls.length} calls</p>
+          <p className="text-sm text-slate-400 mt-0.5 font-medium">Showing {filteredCalls.length} calls</p>
         </div>
         <RangePicker value={range} onChange={setRange} />
       </div>
@@ -250,10 +261,10 @@ export default function Dashboard() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard label="Total Calls"  value={total.toLocaleString()}                    icon="📞" accent="blue" />
-          <KPICard label="Audited"      value={audited.toLocaleString()}                  icon="✅" accent="green" sub={total ? `${Math.round(audited/total*100)}% of total` : '—'} />
-          <KPICard label="Avg Score"    value={avgScore !== null ? `${avgScore}%` : '—'}  icon="⭐" accent="purple" />
-          <KPICard label="Failed"       value={failed.toLocaleString()}                   icon="⚠️" accent="red" sub={failed ? `${Math.round(failed/total*100)}% error rate` : 'No errors'} />
+          <KPICard label="Total Calls"  value={total.toLocaleString()}                    icon={<Phone size={18} className="text-white" />} accent="blue" />
+          <KPICard label="Audited"      value={audited.toLocaleString()}                  icon={<Check size={18} className="text-white" />} accent="green" sub={total ? `${Math.round(audited/total*100)}% of total` : '—'} />
+          <KPICard label="Avg Score"    value={avgScore !== null ? `${avgScore}%` : '—'}  icon={<Star size={18} className="text-white" />} accent="purple" />
+          <KPICard label="Failed"       value={failed.toLocaleString()}                   icon={<AlertTriangle size={18} className="text-white" />} accent="red" sub={failed ? `${Math.round(failed/total*100)}% error rate` : 'No errors'} />
         </div>
 
         {/* Performance Zones + Daily Trend */}
@@ -281,8 +292,8 @@ export default function Dashboard() {
                 </div>
                 <div className="space-y-4 flex-1">
                   {[
-                    { color:'#10b981', label:'Good (81–100%)',    count: zones.green },
-                    { color:'#f59e0b', label:'Average (51–80%)',  count: zones.yellow },
+                    { color:'#10b981', label:'Good (71–100%)',    count: zones.green },
+                    { color:'#f59e0b', label:'Average (51–70%)',  count: zones.yellow },
                     { color:'#ef4444', label:'Critical (≤50%)',   count: zones.red },
                   ].map(z => (
                     <div key={z.label}>
@@ -329,13 +340,13 @@ export default function Dashboard() {
         {/* Avg Score by Parameter — full width, tall, color-coded */}
         <Card
           title="Avg Score by Parameter"
-          sub="Sorted worst → best · bars coloured by zone: red ≤50% · yellow 51–80% · green 81–100%"
+          sub="Sorted worst → best · bars coloured by zone: red ≤50% · yellow 51–70% · green 71–100%"
         >
           {paramData.length === 0 ? <p className="text-sm text-slate-400">No data.</p> : (
             <>
               {/* Zone legend */}
               <div className="flex items-center gap-6 mb-5">
-                {[['#ef4444','Critical ≤50%'],['#f59e0b','Average 51–80%'],['#10b981','Good 81–100%']].map(([c,l])=>(
+                {[['#ef4444','Critical ≤50%'],['#f59e0b','Average 51–70%'],['#10b981','Good 71–100%']].map(([c,l])=>(
                   <div key={l} className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                     <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: c }} />
                     {l}
@@ -348,7 +359,7 @@ export default function Dashboard() {
                   <XAxis type="number" domain={[0,100]} tick={{ fontSize:11, fill:'#94a3b8', fontWeight:600 }}
                     axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} />
                   <YAxis type="category" dataKey="param" tick={{ fontSize:12, fill:'#475569', fontWeight:600 }}
-                    axisLine={false} tickLine={false} width={150} />
+                    axisLine={false} tickLine={false} width={220} />
                   <ReferenceLine x={60} stroke="#64748b" strokeDasharray="5 3" strokeWidth={1.5}
                     label={{ value:'60%', position:'insideTopRight', fontSize:10, fill:'#64748b', fontWeight:700 }} />
                   <Tooltip content={<DarkTooltip />} cursor={{ fill:'#f8fafc' }} />
@@ -388,7 +399,7 @@ export default function Dashboard() {
             action={
               allParams.length > 0 && (
                 <select value={histParam || ''} onChange={e => setHistParam(e.target.value)}
-                  className="text-xs font-semibold border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 max-w-[140px] truncate">
+                  className="text-sm font-semibold border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/30 min-w-[200px] max-w-[260px] shadow-sm">
                   {allParams.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               )
@@ -419,9 +430,9 @@ export default function Dashboard() {
 
         {/* Call Duration sparkline */}
         {durationData.length > 0 && (
-          <Card title="Call Duration" sub="Last 60 calls chronologically">
-            <ResponsiveContainer width="100%" height={120}>
-              <AreaChart data={durationData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <Card title="Call Duration" sub={`Last 60 calls chronologically${avgDuration !== null ? ` · avg ${avgDuration}m` : ''}`}>
+            <ResponsiveContainer width="100%" height={140}>
+              <AreaChart data={durationData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="durGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
@@ -431,6 +442,10 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="call" tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}m`} width={30} />
+                {avgDuration !== null && (
+                  <ReferenceLine y={avgDuration} stroke="#8b5cf6" strokeDasharray="5 3" strokeWidth={1.5}
+                    label={{ value:`avg ${avgDuration}m`, position:'insideTopRight', fontSize:10, fill:'#8b5cf6', fontWeight:700 }} />
+                )}
                 <Tooltip content={<DarkTooltip />} />
                 <Area type="monotone" dataKey="min" name="Duration (min)" stroke="#8b5cf6" fill="url(#durGrad)" strokeWidth={2.5} dot={false} activeDot={{ r:4, fill:'#8b5cf6' }} />
               </AreaChart>
@@ -455,35 +470,55 @@ export default function Dashboard() {
           >
             {flagged.length === 0 ? (
               <div className="flex items-center gap-3 py-8 justify-center text-slate-400">
-                <span className="text-3xl">🎉</span>
+                <Trophy size={24} className="text-amber-400" />
                 <p className="text-sm font-medium">No calls below {threshold}% in this range.</p>
               </div>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    {['File','Status','Score','Date'].map(h=><th key={h} className="pb-3 border-b border-slate-100">{h}</th>)}
+                  <tr className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {['File','Agent','Status','Score','Demo Booked','Date'].map(h=><th key={h} className="pb-3 pr-4 border-b border-slate-100/80 whitespace-nowrap">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {flagged.map(c => {
-                    const pcts = scoreMap[c.id]
-                    const sc = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : 0
+                    const pcts      = scoreMap[c.id]
+                    const sc        = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : 0
+                    const agentName = c.metadata?.agent_name || null
+                    const demoScore = paramScoreMap[c.id]?.['Was Demo Scheduled ?'] ?? paramScoreMap[c.id]?.['Was Demo Scheduled?'] ?? null
+                    const demoLabel = demoScore === null ? '—'
+                      : demoScore >= 3 ? <span className="text-emerald-600 font-bold">✓ Confirmed</span>
+                      : demoScore >= 2 ? <span className="text-amber-600 font-bold">⟳ Callback</span>
+                      : demoScore >= 1 ? <span className="text-rose-500 font-bold">✕ Declined</span>
+                      : <span className="text-slate-400">Not attempted</span>
                     return (
-                      <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3.5 pr-4 font-semibold text-slate-700 max-w-[220px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
+                      <tr key={c.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100/50 last:border-0">
+                        <td className="py-3.5 pr-4 font-semibold text-slate-700 max-w-[180px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
+                        <td className="py-3.5 pr-4">
+                          {agentName
+                            ? <span className="flex items-center gap-1.5 text-xs font-bold text-violet-700 whitespace-nowrap">
+                                <span className="w-5 h-5 rounded-md bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                                  {agentName.slice(0,2).toUpperCase()}
+                                </span>
+                                {agentName}
+                              </span>
+                            : <span className="text-slate-300 text-xs">—</span>}
+                        </td>
                         <td className="py-3.5 pr-4"><StatusBadge status={c.status} /></td>
                         <td className="py-3.5 pr-4">
                           <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border ${scoreBgClass(sc)}`}>
-                            <ArrowDownRight size={12} /> {sc}%
+                            <TrendingDown size={11} /> {sc}%
                           </span>
                         </td>
-                        <td className="py-3.5 text-slate-400 text-xs">{new Date(c.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</td>
+                        <td className="py-3.5 pr-4 text-xs">{demoLabel}</td>
+                        <td className="py-3.5 text-slate-400 text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </Card>
         </div>
@@ -496,8 +531,8 @@ export default function Dashboard() {
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                {['File','Status','Score','Duration','Date'].map(h=><th key={h} className="pb-3 border-b border-slate-100">{h}</th>)}
+              <tr className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                {['File','Status','Score','Duration','Date'].map(h=><th key={h} className="pb-3 border-b border-slate-100/80">{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -506,7 +541,7 @@ export default function Dashboard() {
                 const sc   = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : null
                 const dur  = c.duration_seconds ? `${(c.duration_seconds/60).toFixed(1)}m` : '—'
                 return (
-                  <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={c.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100/50 last:border-0">
                     <td className="py-3.5 pr-4 font-semibold text-slate-700 max-w-[200px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
                     <td className="py-3.5 pr-4"><StatusBadge status={c.status} /></td>
                     <td className="py-3.5 pr-4">

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Phone, Award, TrendingUp, TrendingDown, ChevronRight, ExternalLink } from 'lucide-react'
+import { Phone, Award, TrendingUp, TrendingDown, ChevronRight, ExternalLink, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 
@@ -66,6 +66,7 @@ export default function Agents() {
   const [loading, setLoading]     = useState(true)
   const [filter, setFilter]       = useState('last10')
   const [selected, setSelected]   = useState(null)
+  const [search, setSearch]       = useState('')
 
   useEffect(() => {
     async function load() {
@@ -195,10 +196,18 @@ export default function Agents() {
           <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 items-start">
             {/* ── Agent list ── */}
             <div className="space-y-2">
+              <div className="relative mb-3">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text" placeholder="Search agent…" value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all"
+                />
+              </div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1 mb-3">
                 {knownAgents.length} detected agent{knownAgents.length !== 1 ? 's' : ''}
               </p>
-              {agents.map(agent => {
+              {agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase())).map(agent => {
                 const isSelected = selectedAgent?.name === agent.name
                 const gradient   = avatarGradient(agent.name)
                 return (

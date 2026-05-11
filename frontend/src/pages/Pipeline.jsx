@@ -519,11 +519,17 @@ function ManualUploadTab() {
         continue
       }
 
-      // Enrich scores with max_score from rubric (Gemini response doesn't include it)
-      const enrichedScores = scores.map(s => ({
+      // Enrich scores with max_score from rubric, fill any missing params, sort by rubric order
+      const scoredNames   = new Set(scores.map(s => s.parameter))
+      const missingScores = rubric.parameters
+        .filter(p => !scoredNames.has(p.name))
+        .map(p => ({ parameter: p.name, score: 0, reasoning: '', max_score: p.max_score }))
+
+      const rubricOrder = Object.fromEntries(rubric.parameters.map((p, i) => [p.name, i]))
+      const enrichedScores = [...scores.map(s => ({
         ...s,
         max_score: rubric.parameters.find(p => p.name === s.parameter)?.max_score ?? 10,
-      }))
+      })), ...missingScores].sort((a, b) => (rubricOrder[a.parameter] ?? 999) - (rubricOrder[b.parameter] ?? 999))
 
       const overallPct = enrichedScores.length
         ? Math.round(enrichedScores.reduce((a, s) => a + s.score / s.max_score, 0) / enrichedScores.length * 100)

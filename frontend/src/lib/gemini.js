@@ -106,11 +106,12 @@ export async function scoreTranscript(transcript, rubricParams, { durationSecond
     '2. Only award YES if the thing clearly happened. If absent, uncertain, or cut short → 0.',
     '3. Numeric parameters: use the full range 0–max, be proportional to quality.',
     '4. Agent name: identify the sales agent\'s first name from their self-introduction at the start of the call (e.g. "Hi, I\'m Priya calling from SuperSheldon"). If unclear or absent, use null.',
+    `5. COMPLETENESS: you MUST return a score for every single parameter listed — all ${rubricParams.length} of them. Never skip or omit a parameter. If something clearly did not happen, score it 0.`,
     metaSection,
-    `\n## Rubric Parameters\n${paramLines}`,
+    `\n## Rubric Parameters (all ${rubricParams.length} must be scored)\n${paramLines}`,
     `\nFull rubric (JSON):\n${JSON.stringify(rubricParams, null, 2)}`,
     `\n## Call Transcript\n${transcript}`,
-    '\nRespond ONLY with a JSON object: {"agent_name":"<first name or null>","scores":[{"parameter":"<name>","score":<integer>,"reasoning":"<1-2 sentences>"},...]}',
+    `\nRespond ONLY with a JSON object containing exactly ${rubricParams.length} score entries: {"agent_name":"<first name or null>","scores":[{"parameter":"<name>","score":<integer>,"reasoning":"<1-2 sentences>"},...]}`,
   ].join('\n')
 
   const text = await callGemini({

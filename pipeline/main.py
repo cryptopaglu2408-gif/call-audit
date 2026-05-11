@@ -194,7 +194,9 @@ def build_prompt(
         "2. Only award YES if the thing clearly happened. If absent, uncertain, or cut short → 0.\n"
         "3. Numeric parameters: use the full range 0–max, be proportional to quality.\n"
         "4. Agent name: identify the sales agent's first name from their self-introduction "
-        '(e.g. "Hi, I\'m Priya from SuperSheldon"). Use null if unclear.'
+        '(e.g. "Hi, I\'m Priya from SuperSheldon"). Use null if unclear.\n'
+        f"5. COMPLETENESS: you MUST return a score for every single one of the {len(rubric_params)} parameters listed. "
+        "Never skip or omit a parameter. If something clearly did not happen, score it 0."
     )
     meta_section = ""
     if duration_seconds is not None:
@@ -210,11 +212,11 @@ def build_prompt(
         SYSTEM_PROMPT
         + f"\n\n{scoring_rules}"
         + meta_section
-        + f"\n\n## Rubric Parameters\n{param_lines}"
+        + f"\n\n## Rubric Parameters (all {len(rubric_params)} must be scored)\n{param_lines}"
         + "\n\nFull rubric definition (JSON):\n"
         + json.dumps(rubric_params, indent=2)
         + f"\n\n## Call Transcript\n{transcript}"
-        + "\n\nRespond ONLY with a JSON object: "
+        + f"\n\nRespond ONLY with a JSON object containing exactly {len(rubric_params)} score entries: "
         + '{"agent_name":"<first name or null>","scores":[{"parameter":"<name>","score":<integer>,"reasoning":"<1-2 sentences>"},...]}. '
         + "Extract the agent's first name from their self-introduction. Use null if unclear."
     )
@@ -421,7 +423,13 @@ def main() -> None:
                     "metadata": {"filename": name, "source": "auto-pipeline", "agent_name": agent_name}
                 }).eq("id", call_id).execute()
 
-            # 7. Save scores
+            # 7. Save scores — fill any parameters Gemini skipped with score 0
+            scored_names = {s["parameter"] for s in scores}
+            missing = [
+                {"parameter": p["name"], "score": 0, "reasoning": ""}
+                for p in rubric_params if p["name"] not in scored_names
+            ]
+            all_scores = scores + missing
             supabase_client.table("scores").upsert([
                 {
                     "call_id":   call_id,
@@ -433,7 +441,7 @@ def main() -> None:
                     ),
                     "reasoning": s.get("reasoning", ""),
                 }
-                for s in scores
+                for s in all_scores
             ], on_conflict="call_id,rubric_id,parameter").execute()
 
             supabase_client.table("calls").update({"status": "done"}).eq("id", call_id).execute()
