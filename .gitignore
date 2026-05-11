@@ -1,4 +1,6 @@
 .env
+.env.local
+.env.*.local
 *.json
 !package.json
 !package-lock.json
