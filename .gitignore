@@ -26,3 +26,4 @@ temp_audio/
 Thumbs.db
 
 node_modules/
+frontend/dist/

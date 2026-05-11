@@ -82,17 +82,29 @@ function AutoPipelineTab() {
   const [sending, setSending]     = useState(false)
   const [sendResult, setSendResult] = useState(null)
   const [copied, setCopied]       = useState(false)
+  const [paused, setPaused]       = useState(false)
+  const [pauseLoading, setPauseLoading] = useState(false)
 
   async function load() {
     setLoading(true)
-    const [{ data: c }, { data: s }] = await Promise.all([
+    const [{ data: c }, { data: s }, { data: cfg }] = await Promise.all([
       supabase.from('calls').select('id, status, created_at, duration_seconds, metadata, drive_link').filter('metadata->>source', 'eq', 'auto-pipeline').order('created_at', { ascending: false }).limit(200),
       supabase.from('scores').select('call_id, parameter, score, max_score'),
+      supabase.from('settings').select('value').eq('key', 'pipeline').single(),
     ])
     setCalls(c || [])
     setAllScores(s || [])
+    if (cfg) setPaused(cfg.value?.paused ?? false)
     setTs(new Date())
     setLoading(false)
+  }
+
+  async function togglePause() {
+    setPauseLoading(true)
+    const next = !paused
+    await supabase.from('settings').update({ value: { paused: next } }).eq('key', 'pipeline')
+    setPaused(next)
+    setPauseLoading(false)
   }
 
   useEffect(() => { load() }, [])
@@ -154,17 +166,32 @@ function AutoPipelineTab() {
   return (
     <div className="space-y-6">
       {/* Status banner */}
-      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-6 text-white flex items-center justify-between shadow-lg shadow-emerald-100/50">
+      <div className={`bg-gradient-to-r ${paused ? 'from-slate-500 to-slate-700' : 'from-emerald-500 to-teal-600'} rounded-2xl p-6 text-white flex items-center justify-between shadow-lg transition-all duration-500`}>
         <div className="flex items-center gap-4">
-          <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
+          <div className={`w-3 h-3 rounded-full bg-white ${paused ? '' : 'animate-pulse'}`} />
           <div>
-            <p className="font-black text-base tracking-tight">Pipeline Active</p>
-            <p className="text-emerald-50 text-xs mt-0.5 font-medium">{lastRun ? `Last processed: ${new Date(lastRun).toLocaleString('en-AU',{dateStyle:'medium',timeStyle:'short'})}` : 'No calls processed yet'}</p>
+            <p className="font-black text-base tracking-tight">{paused ? 'Pipeline Paused' : 'Pipeline Active'}</p>
+            <p className={`${paused ? 'text-slate-300' : 'text-emerald-50'} text-xs mt-0.5 font-medium`}>
+              {paused ? 'No new calls will be processed until resumed' : lastRun ? `Last processed: ${new Date(lastRun).toLocaleString('en-AU',{dateStyle:'medium',timeStyle:'short'})}` : 'No calls processed yet'}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2">
-          <Clock size={14} className="text-white" />
-          <span className="text-sm font-bold">Every 30 min</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2">
+            <Clock size={14} className="text-white" />
+            <span className="text-sm font-bold">Every 30 min</span>
+          </div>
+          <button
+            onClick={togglePause}
+            disabled={pauseLoading}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200 disabled:opacity-50 ${
+              paused
+                ? 'bg-emerald-400 hover:bg-emerald-300 text-emerald-900'
+                : 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+            }`}
+          >
+            {pauseLoading ? '…' : paused ? '▶ Resume' : '⏸ Pause'}
+          </button>
         </div>
       </div>
 

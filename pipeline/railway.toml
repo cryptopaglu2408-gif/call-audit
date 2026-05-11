@@ -1,6 +1,7 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "pipeline/Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
+startCommand = "python main.py"
 cronSchedule = "*/30 * * * *"

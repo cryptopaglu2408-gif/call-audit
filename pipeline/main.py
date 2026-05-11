@@ -350,6 +350,12 @@ def send_slack(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
+    # Check if pipeline is paused via Supabase settings
+    settings = supabase_client.table("settings").select("value").eq("key", "pipeline").execute()
+    if settings.data and settings.data[0]["value"].get("paused"):
+        print("Pipeline is paused from the dashboard — exiting.")
+        return
+
     drive_svc = get_drive_service()
 
     rubric        = supabase_client.table("rubrics").select("*").eq("is_active", True).limit(1).execute().data[0]
