@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { Play, Upload as UploadIcon } from "lucide-react";
+import { Play, Upload as UploadIcon, FileText, AlertCircle } from "lucide-react";
 import Panel from "../components/Panel";
 import { startProcess, streamProcess } from "../lib/api";
 import { supabase } from "../lib/supabase";
@@ -67,69 +67,98 @@ export default function Process() {
   }, [last]);
 
   return (
-    <div className="space-y-4">
-      <Panel title="Process calls">
+    <div className="space-y-6">
+      <Panel title="Process Calls">
         {!rubric && (
-          <div className="bg-rose-50 text-rose-800 rounded-xl p-3 text-sm">
-            No active rubric. Open the <a className="underline" href="/rubric">Rubric</a> page first.
+          <div className="bg-rose-50 text-rose-800 rounded-xl p-4 text-sm font-medium mb-4 flex items-center gap-2 border border-rose-200">
+            <AlertCircle className="w-4 h-4" />
+            <span>No active rubric found. Please configure a <a className="underline hover:text-rose-900" href="/rubric">Rubric</a> first.</span>
           </div>
         )}
 
-        <label className="flex items-center gap-3 cursor-pointer w-fit">
-          <span className="btn-ghost"><UploadIcon className="w-4 h-4" /> {file ? file.name : "Choose .xlsx / .csv"}</span>
-          <input type="file" accept=".xlsx,.csv" onChange={onFile} className="hidden" />
-        </label>
+        <div className="mb-6">
+          <p className="text-sm text-slate-500 mb-4">
+            Upload a spreadsheet containing Google Drive audio links to start the auditing process.
+          </p>
+          
+          <label className={`flex flex-col items-center justify-center border-2 border-dashed rounded-2xl p-8 transition-all cursor-pointer ${file ? "border-brand-green bg-emerald-50/30" : "border-slate-200 hover:border-brand-green hover:bg-slate-50"}`}>
+            <input type="file" accept=".xlsx,.csv" onChange={onFile} className="hidden" />
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${file ? "bg-brand-green text-white" : "bg-slate-100 text-slate-500"}`}>
+              {file ? <FileText className="w-6 h-6" /> : <UploadIcon className="w-6 h-6" />}
+            </div>
+            <span className="text-sm font-semibold text-slate-700">
+              {file ? file.name : "Drop your file here or click to browse"}
+            </span>
+            <span className="text-xs text-slate-500 mt-1">Supports .xlsx and .csv</span>
+          </label>
+        </div>
 
         {file && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-            <label className="text-sm text-slate-600">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               Audio-link column
-              <select className="input mt-1" value={linkCol} onChange={(e) => setLinkCol(e.target.value)}>
-                <option value="">— pick —</option>
+              <select className="input mt-1.5" value={linkCol} onChange={(e) => setLinkCol(e.target.value)}>
+                <option value="">— pick column —</option>
                 {columns.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
-            <label className="text-sm text-slate-600">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               From row
               <input type="number" min={2} max={rowCount + 1} value={rowStart}
-                     onChange={(e) => setRowStart(+e.target.value)} className="input mt-1" />
+                     onChange={(e) => setRowStart(+e.target.value)} className="input mt-1.5" />
             </label>
-            <label className="text-sm text-slate-600">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               To row
               <input type="number" min={2} max={rowCount + 1} value={rowEnd}
-                     onChange={(e) => setRowEnd(+e.target.value)} className="input mt-1" />
+                     onChange={(e) => setRowEnd(+e.target.value)} className="input mt-1.5" />
             </label>
           </div>
         )}
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button className="btn-primary" disabled={!file || !linkCol || !rubric || running}
                   onClick={run}>
-            <Play className="w-4 h-4" /> {running ? "Processing…" : "Process selected range"}
+            <Play className="w-4 h-4" /> {running ? "Processing…" : "Process Selected Range"}
           </button>
-          <span className="text-sm text-slate-500">
-            {rubric ? `Active rubric: ${rubric.name}` : ""}
+          <span className="text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
+            {rubric ? `Active Rubric: ${rubric.name}` : "No Active Rubric"}
           </span>
         </div>
 
         {(running || updates.length > 0) && (
-          <div className="mt-4">
-            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-              <div className="h-full bg-brand-green transition-all" style={{ width: `${progress}%` }} />
+          <div className="mt-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-slate-700">Overall Progress</span>
+              <span className="text-sm font-bold text-brand-green">{progress}%</span>
             </div>
-            <div className="text-xs text-slate-500 mt-1">{progress}%{last ? ` · ${last.message}` : ""}</div>
+            <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+              <div className="h-full bg-gradient-to-r from-brand-green to-emerald-500 transition-all duration-500 rounded-full shadow-lg shadow-emerald-200" style={{ width: `${progress}%` }} />
+            </div>
+            {last && (
+              <div className="text-xs font-medium text-slate-500 mt-2 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-brand-green rounded-full inline-block" />
+                {last.message}
+              </div>
+            )}
           </div>
         )}
 
-        {error && <div className="mt-3 bg-rose-50 text-rose-800 rounded-xl p-3 text-sm">{error}</div>}
+        {error && (
+          <div className="mt-4 bg-rose-50 text-rose-800 rounded-xl p-4 text-sm font-medium flex items-center gap-2 border border-rose-200">
+            <AlertCircle className="w-4 h-4" />
+            <span>{error}</span>
+          </div>
+        )}
       </Panel>
 
       {updates.length > 0 && (
-        <Panel title="Live log">
-          <ul className="text-sm font-mono space-y-1 max-h-80 overflow-auto">
+        <Panel title="Live Log" right={<span className="text-xs font-semibold text-slate-500 bg-slate-100 rounded-full px-3 py-1">{updates.length} events</span>}>
+          <ul className="text-sm font-mono space-y-2 max-h-80 overflow-auto bg-slate-900 text-slate-300 p-4 rounded-xl">
             {updates.slice().reverse().map((u, i) => (
-              <li key={i} className={u.stage === "error" ? "text-rose-700" : u.stage === "done" ? "text-emerald-700" : "text-slate-600"}>
-                [{u.index}/{u.total}] row {u.sheet_row}: {u.message}
+              <li key={i} className={`flex items-start gap-2 ${u.stage === "error" ? "text-rose-400" : u.stage === "done" ? "text-emerald-400" : "text-slate-300"}`}>
+                <span className="text-slate-500">[{u.index}/{u.total}]</span>
+                <span className="font-semibold text-slate-400">row {u.sheet_row}:</span>
+                <span>{u.message}</span>
               </li>
             ))}
           </ul>

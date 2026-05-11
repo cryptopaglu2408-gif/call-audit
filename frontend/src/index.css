@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f8fafc;
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border border-white/60 shadow-xl shadow-slate-200/50;
+  }
+  
+  .glass-dark {
+    @apply bg-slate-900/80 backdrop-blur-md border border-slate-700/50 shadow-xl shadow-black/20;
+  }
+}

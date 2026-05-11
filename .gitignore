@@ -1,4 +1,9 @@
 .env
+*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!vite.config.*json
 .venv/
 venv/
 __pycache__/
@@ -19,3 +24,5 @@ temp_audio/
 
 .DS_Store
 Thumbs.db
+
+node_modules/

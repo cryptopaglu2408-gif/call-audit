@@ -4,7 +4,7 @@ import {
   Area, AreaChart, Tooltip, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import {
-  Phone, CheckCircle2, Star, AlertTriangle,
+  Phone, CheckCircle2, Star, AlertTriangle, ArrowUpRight,
 } from "lucide-react";
 import KpiCard from "../components/KpiCard";
 import Panel from "../components/Panel";
@@ -12,14 +12,14 @@ import { supabase } from "../lib/supabase";
 import type { Call, Score } from "../lib/types";
 
 const STATUS_COLOR: Record<string, string> = {
-  done: "#22c55e",
-  pending: "#7c3aed",
-  error: "#f472b6",
-  failed: "#ef4444",
-  downloaded: "#60a5fa",
-  transcribed: "#facc15",
+  done: "#10b981", // Emerald
+  pending: "#6366f1", // Indigo
+  error: "#f43f5e", // Rose
+  failed: "#ef4444", // Red
+  downloaded: "#3b82f6", // Blue
+  transcribed: "#f59e0b", // Amber
 };
-const PARAM_PALETTE = ["#22c55e", "#7c3aed", "#f472b6", "#60a5fa", "#fb923c", "#facc15", "#0f3a2d"];
+const PARAM_PALETTE = ["#10b981", "#6366f1", "#f43f5e", "#3b82f6", "#f59e0b", "#8b5cf6", "#0f3a2d"];
 const DAY_ORDER = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
 export default function Dashboard() {
@@ -107,15 +107,29 @@ export default function Dashboard() {
     }));
   }, [scores]);
 
-  if (err) return <div className="panel text-rose-700">Failed to load: {err}</div>;
-  if (loading) return <div className="panel">Loading…</div>;
+  if (err) return <div className="panel text-rose-700 font-medium">Failed to load: {err}</div>;
+  if (loading) return (
+    <div className="panel flex items-center justify-center py-12">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-brand-green rounded-full animate-spin" />
+        <span className="text-sm text-slate-500 font-medium">Loading dashboard data…</span>
+      </div>
+    </div>
+  );
+
   if (calls.length === 0) {
     return (
-      <div className="panel">
-        <h2 className="text-lg font-semibold mb-2">No calls yet</h2>
-        <p className="text-slate-600">
-          Head to <a href="/process" className="text-brand-green font-medium">Process calls</a> to upload a sheet.
+      <div className="panel py-12 text-center">
+        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Phone className="w-8 h-8 text-slate-400" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">No calls yet</h2>
+        <p className="text-slate-500 mb-6 max-w-sm mx-auto">
+          Upload a spreadsheet with audio links to start auditing calls.
         </p>
+        <a href="/process" className="btn-primary">
+          Process calls <ArrowUpRight className="w-4 h-4" />
+        </a>
       </div>
     );
   }
@@ -128,9 +142,9 @@ export default function Dashboard() {
   const maxDay = Math.max(...dailyScore.map(d => d.score), 1);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard label="Total Calls" value={total.toLocaleString()}
                  delta="25%" deltaUp icon={Phone} tone="lavender" />
         <KpiCard label="Audited Calls" value={audited.toLocaleString()}
@@ -143,38 +157,44 @@ export default function Dashboard() {
       </div>
 
       {/* Service level + Daily score */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <Panel title="Service level" className="lg:col-span-2">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <Panel title="Service Level" className="lg:col-span-2">
+          <div className="flex items-center gap-6 py-2">
+            <div className="flex-1 space-y-4">
               {statusData.map(s => {
                 const pct = total ? Math.round((s.value / total) * 100) : 0;
                 return (
                   <div key={s.name} className="flex items-center gap-3">
-                    <span className="w-2.5 h-2.5 rounded-full"
+                    <span className="w-3 h-3 rounded-full shadow-sm"
                           style={{ background: STATUS_COLOR[s.name] ?? "#cbd5e1" }} />
-                    <div>
-                      <div className="font-bold text-slate-900">{pct}%</div>
-                      <div className="text-xs text-slate-500 capitalize">{s.name}</div>
+                    <div className="flex-1">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-sm font-semibold text-slate-700 capitalize">{s.name}</span>
+                        <span className="text-sm font-bold text-slate-900">{pct}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500"
+                             style={{ width: `${pct}%`, background: STATUS_COLOR[s.name] ?? "#cbd5e1" }} />
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div className="w-44 h-44 relative">
+            <div className="w-40 h-40 relative flex-shrink-0">
               <ResponsiveContainer>
                 <PieChart>
-                  <Pie data={statusData} dataKey="value" innerRadius={56} outerRadius={80}
-                       paddingAngle={3} stroke="white" strokeWidth={3}>
+                  <Pie data={statusData} dataKey="value" innerRadius={50} outerRadius={70}
+                       paddingAngle={4} stroke="transparent">
                     {statusData.map((s) => (
-                      <Cell key={s.name} fill={STATUS_COLOR[s.name] ?? "#cbd5e1"} />
+                      <Cell key={s.name} fill={STATUS_COLOR[s.name] ?? "#cbd5e1"} className="outline-none focus:outline-none" />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div className="text-xs text-slate-500">Total calls</div>
-                <div className="text-xl font-bold">{total}</div>
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Total</div>
+                <div className="text-2xl font-bold text-slate-900">{total}</div>
               </div>
             </div>
           </div>
@@ -183,23 +203,23 @@ export default function Dashboard() {
         <Panel
           title="Daily Score Trend"
           className="lg:col-span-3"
-          right={<span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-3 py-1">Weekly</span>}
+          right={<span className="text-xs font-semibold text-slate-500 bg-slate-100 rounded-full px-3 py-1">Weekly</span>}
         >
           <div className="h-64">
             <ResponsiveContainer>
               <BarChart data={dailyScore} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
                 <CartesianGrid stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="day" axisLine={false} tickLine={false}
-                       tick={{ fontSize: 12, fill: "#64748b" }} />
+                       tick={{ fontSize: 12, fill: "#94a3b8", fontWeight: 500 }} />
                 <YAxis tickFormatter={(v) => `${v}%`} domain={[0, 100]}
                        axisLine={false} tickLine={false}
-                       tick={{ fontSize: 12, fill: "#64748b" }} />
-                <Tooltip cursor={{ fill: "transparent" }}
-                         contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,.08)" }}
-                         formatter={(v: number) => [`${v}%`, "score"]} />
-                <Bar dataKey="score" radius={[20, 20, 20, 20]} barSize={24}>
+                       tick={{ fontSize: 12, fill: "#94a3b8", fontWeight: 500 }} />
+                <Tooltip cursor={{ fill: "rgba(241, 245, 249, 0.6)" }}
+                         contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)" }}
+                         formatter={(v: number) => [`${v}%`, "Score"]} />
+                <Bar dataKey="score" radius={[6, 6, 0, 0]} barSize={32}>
                   {dailyScore.map((d) => (
-                    <Cell key={d.day} fill={d.score === maxDay && d.score > 0 ? "#22c55e" : "#dcfce7"} />
+                    <Cell key={d.day} fill={d.score === maxDay && d.score > 0 ? "#10b981" : "#a7f3d0"} />
                   ))}
                 </Bar>
               </BarChart>
@@ -209,27 +229,28 @@ export default function Dashboard() {
       </div>
 
       {/* Duration trend + parameter breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <Panel title="Call Duration (recent runs)" className="lg:col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <Panel title="Call Duration (Recent Runs)" className="lg:col-span-3">
           <div className="h-60">
             <ResponsiveContainer>
               <AreaChart data={durationTrend} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
                 <defs>
                   <linearGradient id="dur" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#7c3aed" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="x" axisLine={false} tickLine={false}
-                       tick={{ fontSize: 12, fill: "#64748b" }} />
+                       tick={{ fontSize: 12, fill: "#94a3b8", fontWeight: 500 }} />
                 <YAxis axisLine={false} tickLine={false}
-                       tick={{ fontSize: 12, fill: "#64748b" }}
+                       tick={{ fontSize: 12, fill: "#94a3b8", fontWeight: 500 }}
                        tickFormatter={(v) => `${v}m`} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "none" }}
-                         formatter={(v: number) => [`${v} min`, "duration"]} />
-                <Area type="monotone" dataKey="minutes" stroke="#7c3aed" strokeWidth={2}
-                      strokeDasharray="6 6" fill="url(#dur)" />
+                <Tooltip contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)" }}
+                         formatter={(v: number) => [`${v} min`, "Duration"]} />
+                <Area type="monotone" dataKey="minutes" stroke="#6366f1" strokeWidth={3}
+                      fill="url(#dur)" dot={{ r: 4, fill: "#6366f1", strokeWidth: 2, stroke: "#fff" }}
+                      activeDot={{ r: 6, fill: "#6366f1", strokeWidth: 2, stroke: "#fff" }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -237,19 +258,22 @@ export default function Dashboard() {
 
         <Panel title="Score by Parameter" className="lg:col-span-2">
           {paramBreakdown.length === 0 ? (
-            <div className="text-sm text-slate-500">Score parameters appear here once calls are audited.</div>
+            <div className="flex items-center justify-center h-60 text-sm text-slate-400 font-medium">
+              Score parameters appear here once calls are audited.
+            </div>
           ) : (
             <div className="h-60">
               <ResponsiveContainer>
                 <PieChart>
                   <Pie data={paramBreakdown} dataKey="value" nameKey="name"
-                       innerRadius={50} outerRadius={90} paddingAngle={2}
-                       stroke="white" strokeWidth={3} label={(d) => `${d.name}`}>
+                       innerRadius={40} outerRadius={70} paddingAngle={3}
+                       stroke="transparent" label={(d) => `${d.name}`}>
                     {paramBreakdown.map((p, i) => (
-                      <Cell key={p.name} fill={PARAM_PALETTE[i % PARAM_PALETTE.length]} />
+                      <Cell key={p.name} fill={PARAM_PALETTE[i % PARAM_PALETTE.length]} className="outline-none focus:outline-none" />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [`${v}%`, "score"]} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "none", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)" }}
+                           formatter={(v: number) => [`${v}%`, "Score"]} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -258,26 +282,29 @@ export default function Dashboard() {
       </div>
 
       {/* Recent calls */}
-      <Panel title="Recent Calls" right={<span className="text-xs text-slate-500">{total} total</span>}>
-        <div className="grid grid-cols-[80px_120px_1fr_120px_180px] gap-2 text-xs uppercase tracking-wide text-slate-500 px-1">
+      <Panel title="Recent Calls" right={<span className="text-xs font-semibold text-slate-500 bg-slate-100 rounded-full px-3 py-1">{total} total</span>}>
+        <div className="grid grid-cols-[80px_120px_1fr_120px_180px] gap-4 text-xs uppercase tracking-wider font-semibold text-slate-500 px-2 mb-2">
           <div>Row</div><div>Status</div><div>Language</div><div>Duration</div><div>Processed</div>
         </div>
-        {calls.slice(0, 8).map(c => (
-          <div key={c.id}
-               className="table-row grid-cols-[80px_120px_1fr_120px_180px]">
-            <div>{c.source_row ?? "—"}</div>
-            <div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
-                    style={{ background: (STATUS_COLOR[c.status] ?? "#e2e8f0") + "33",
-                             color: STATUS_COLOR[c.status] ?? "#475569" }}>
-                {c.status}
-              </span>
+        <div className="space-y-1">
+          {calls.slice(0, 8).map(c => (
+            <div key={c.id}
+                 className="table-row grid-cols-[80px_120px_1fr_120px_180px] px-2 rounded-xl border-0 hover:bg-slate-50/80 transition-colors duration-150">
+              <div className="font-medium text-slate-700">#{c.source_row ?? "—"}</div>
+              <div>
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold capitalize inline-flex items-center"
+                      style={{ background: (STATUS_COLOR[c.status] ?? "#e2e8f0") + "20",
+                               color: STATUS_COLOR[c.status] ?? "#475569" }}>
+                  <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ background: STATUS_COLOR[c.status] ?? "#475569" }} />
+                  {c.status}
+                </span>
+              </div>
+              <div className="text-slate-600 font-medium">{c.language ?? "—"}</div>
+              <div className="text-slate-600 font-medium">{c.duration_seconds ? `${c.duration_seconds.toFixed(1)} s` : "—"}</div>
+              <div className="text-slate-500 text-xs font-medium">{new Date(c.created_at).toLocaleString()}</div>
             </div>
-            <div className="text-slate-600">{c.language ?? "—"}</div>
-            <div>{c.duration_seconds ? `${c.duration_seconds.toFixed(1)} s` : "—"}</div>
-            <div className="text-slate-500">{new Date(c.created_at).toLocaleString()}</div>
-          </div>
-        ))}
+          ))}
+        </div>
       </Panel>
     </div>
   );
