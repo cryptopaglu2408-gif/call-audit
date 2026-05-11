@@ -90,11 +90,11 @@ function AutoPipelineTab() {
     const [{ data: c }, { data: s }, { data: cfg }] = await Promise.all([
       supabase.from('calls').select('id, status, created_at, duration_seconds, metadata, drive_link').filter('metadata->>source', 'eq', 'auto-pipeline').order('created_at', { ascending: false }).limit(200),
       supabase.from('scores').select('call_id, parameter, score, max_score'),
-      supabase.from('settings').select('value').eq('key', 'pipeline').single(),
+      supabase.from('settings').select('value').eq('key', 'pipeline').limit(1),
     ])
     setCalls(c || [])
     setAllScores(s || [])
-    if (cfg) setPaused(cfg.value?.paused ?? false)
+    if (cfg?.[0]) setPaused(cfg[0].value?.paused ?? false)
     setTs(new Date())
     setLoading(false)
   }

@@ -209,10 +209,10 @@ export default function Results() {
     Promise.all([
       supabase.from('calls').select('id, status, created_at, duration_seconds, drive_link, metadata, transcript')
         .order('created_at', { ascending: false }).limit(500),
-      supabase.from('rubrics').select('parameters').eq('is_active', true).limit(1).single(),
+      supabase.from('rubrics').select('parameters').eq('is_active', true).limit(1),
     ]).then(([{ data: c }, { data: r }]) => {
       setCalls(c || [])
-      if (r?.parameters) setRubricOrder(r.parameters.map(p => p.name))
+      if (r?.[0]?.parameters) setRubricOrder(r[0].parameters.map(p => p.name))
       setLoading(false)
     })
   }, [])
