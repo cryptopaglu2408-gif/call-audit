@@ -12,7 +12,9 @@ Every execution:
 import base64
 import json
 import os
+import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -54,15 +56,123 @@ TRANSCRIBE_PROMPT = (
     "turn on a new line). Return ONLY the transcript text — no headings, no commentary, no timestamps."
 )
 
-SYSTEM_PROMPT = (
-    "You are a senior call-quality auditor for SuperSheldon, an educational tutoring company "
-    "operating in Australia and the UK. SuperSheldon's sales agents (with Indian accents) call "
-    "parents to pitch tutoring services for their children.\n\n"
-    "Your task is to evaluate the call transcript against the rubric parameters provided and "
-    "return a score for each parameter. Be strict, fair, and cite specific moments from the "
-    "transcript in your reasoning. Score only what actually happened in the call — do not give "
-    "credit for things not said."
+SCORE_CONTEXT = (
+    "You are a strict call-quality auditor for SuperSheldon, an educational tutoring company "
+    "operating in Australia and the UK. SuperSheldon sales agents (Indian accents) call parents "
+    "to pitch tutoring services for their children. You score calls against a rubric."
 )
+
+# Sub-criteria per numeric parameter (key = normalized lowercase, trailing ? removed)
+NUMERIC_CRITERIA: dict[str, list[tuple]] = {
+    "call opening": [
+        ("a", 2, "Agent stated their own first name in their opening utterance or within the first 15 seconds (e.g. 'Hi, I'm Priya')"),
+        ("b", 2, 'Agent stated "SuperSheldon" as the company name within the first 30 seconds'),
+        ("c", 2, "Agent addressed the parent by name within the first 30 seconds — e.g. said 'Is this [parent name]?' or used the parent's name directly"),
+        ("d", 2, "Agent asked a social or wellness question such as 'How are you today?', 'Hope I'm not catching you at a bad time', or equivalent"),
+        ("e", 2, "Agent did NOT confuse or stumble over their own name, the company name ('SuperSheldon'), or the parent's name — check the transcript for corrections, restarts, or wrong names"),
+    ],
+    "reason of call": [
+        ("a", 2, "Agent used explicit words to state the reason for calling — e.g. 'I'm calling about', 'I'm reaching out regarding', 'I wanted to speak with you about' — AND linked it to the child's education or tutoring"),
+        ("b", 2, "Agent mentioned the child specifically — by name, or as 'your son/daughter', 'your child' — BEFORE making any offer or pitch"),
+        ("c", 2, "The reason for the call was fully communicated within the first 90 seconds of the call"),
+        ("d", 2, "Agent did NOT open with a direct sales pitch or offer in the first statement; call was framed as informational or supportive first"),
+        ("e", 2, "After stating the reason, agent explicitly confirmed the parent is the decision-maker for the child's education — DISTINCT from the name verification in Call Opening"),
+    ],
+    "customer need assessment": [
+        ("a", 2, "Agent asked what year level or grade the child is currently in"),
+        ("b", 2, "Agent asked which subject(s) the child is struggling with or needs help in"),
+        ("c", 2, "Agent asked about the child's academic performance (grades, test results, teacher feedback)"),
+        ("d", 2, "Agent asked whether the family already has any tutoring or support in place"),
+        ("e", 2, "Agent listened and acknowledged responses before moving on — no rushing or interrupting"),
+    ],
+    "usp discussion": [
+        ("a", 2, "Agent mentioned SuperSheldon's personalised or 1-on-1 teaching approach"),
+        ("b", 2, "Agent mentioned the quality or experience of SuperSheldon's tutors"),
+        ("c", 2, "Agent mentioned specific results or outcomes achieved by SuperSheldon students"),
+        ("d", 2, "Agent linked at least one USP directly to the specific problem the parent described"),
+        ("e", 2, "Agent differentiated SuperSheldon from generic tutoring alternatives"),
+    ],
+    "demo session pitch": [
+        ("a", 2, "Agent explained what the demo session involves (format, duration, what to expect)"),
+        ("b", 2, "Agent stated the demo is free or no-obligation"),
+        ("c", 2, "Agent communicated a clear benefit or value proposition for attending the demo"),
+        ("d", 2, "Agent made a direct, explicit ask to book a demo session"),
+        ("e", 2, "Pitch was confident and clear — not rushed, mumbled, or overly tentative"),
+    ],
+    "closing": [
+        ("a", 2, "Agent summarised agreed next steps clearly before ending the call"),
+        ("b", 2, "Agent confirmed any booking, callback, or follow-up details (date, time, platform)"),
+        ("c", 2, "Agent thanked the parent for their time"),
+        ("d", 2, "Agent invited the parent to call back or ask questions if needed"),
+        ("e", 2, "Call ended professionally — no abrupt hangup, trailing off, or unresolved confusion"),
+    ],
+}
+
+BINARY_CRITERIA: dict[str, str] = {
+    "call duration > 3 min": (
+        "Use ONLY the duration from Call Metadata. Award YES if duration > 180 s. "
+        "Award NO if ≤ 180 s or if no metadata was provided. Do NOT estimate from transcript length."
+    ),
+    "problem identified": (
+        "Award YES only if the agent explicitly named or summarised a specific academic problem "
+        '(e.g. "So Jake is struggling with Year 8 maths"). A vague reference to "needing help" '
+        "or 'falling behind' does NOT qualify. Award NO if no specific problem was stated."
+    ),
+    "intent check done": (
+        "Award YES only if the agent explicitly checked the parent's openness or interest before "
+        'proceeding (e.g. "Does that sound like something you\'d be interested in?"). '
+        "Simply continuing to pitch without checking is NOT sufficient. Award NO if no explicit intent check occurred."
+    ),
+    "price discussed": (
+        "Award YES only if the agent mentioned a specific price, price range, or pricing model in "
+        'dollar terms (e.g. "$X per session", "from $Y per week"). Vague references to '
+        '"affordability", "investment", or "discuss pricing later" do NOT qualify.'
+    ),
+}
+
+CATEGORICAL_CRITERIA: dict[str, dict[int, str]] = {
+    "was demo scheduled": {
+        0: "Agent did not mention or attempt to schedule a demo session at all.",
+        1: "Agent mentioned or pitched a demo session but the parent explicitly declined.",
+        2: "Parent agreed to a callback or follow-up to schedule a demo — no specific time confirmed.",
+        3: "Demo session confirmed with a specific date and time during this call.",
+    },
+}
+
+
+def _norm_key(name: str) -> str:
+    import re
+    return re.sub(r"\s*\?\s*$", "", name).lower().strip()
+
+
+def _build_param_rubric(p: dict) -> str:
+    key = _norm_key(p["name"])
+    binary = BINARY_CRITERIA.get(key)
+    categorical = CATEGORICAL_CRITERIA.get(key)
+    numeric = NUMERIC_CRITERIA.get(key)
+
+    if binary:
+        return (
+            f"PARAMETER: {p['name']} — BINARY YES/NO (YES = {p['max_score']} pts, NO = 0 pts)\n"
+            f"CRITERION: {binary}\n"
+            f"REASONING FORMAT: \"EVIDENCE: '[exact quote]' | VERDICT: YES/NO | SCORE: {p['max_score']} or 0\""
+        )
+    if categorical:
+        levels = "\n".join(f"  {k} — {v}" for k, v in categorical.items())
+        return (
+            f"PARAMETER: {p['name']} — CATEGORICAL (0–{p['max_score']})\n"
+            f"LEVELS:\n{levels}\n"
+            f"REASONING FORMAT: \"EVIDENCE: '[exact quote or NO EVIDENCE]' | LEVEL CHOSEN: N | SCORE: N\""
+        )
+    if numeric:
+        lines = "\n".join(f"  [{cid}] +{pts} pts — {desc}" for cid, pts, desc in numeric)
+        return (
+            f"PARAMETER: {p['name']} — NUMERIC (0–{p['max_score']})\n"
+            f"SUB-CRITERIA (sum points for each YES):\n{lines}\n"
+            f"REASONING FORMAT: \"EVIDENCE: '[exact quote or NO EVIDENCE]' | [a] YES/NO [b] YES/NO ... | SCORE: N\""
+        )
+    desc = f" — {p['description']}" if p.get("description") else ""
+    return f"PARAMETER: {p['name']} — NUMERIC (0–{p['max_score']}){desc}"
 
 # ── Clients ───────────────────────────────────────────────────────────────────
 supabase_client = sb.create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -96,22 +206,65 @@ def get_processed_drive_ids() -> set[str]:
     return ids
 
 
+def parse_filename_datetime(name: str) -> datetime | None:
+    """Parse datetime from filenames like 2026-02-16T12-18-35AM-...
+
+    Returns a naive datetime in local recording time, or None if unparseable.
+    """
+    m = re.match(
+        r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})(AM|PM)",
+        name,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    hour, minute, second = int(m.group(4)), int(m.group(5)), int(m.group(6))
+    ampm = m.group(7).upper()
+    if ampm == "AM" and hour == 12:
+        hour = 0
+    elif ampm == "PM" and hour != 12:
+        hour += 12
+    try:
+        return datetime(year, month, day, hour, minute, second)
+    except ValueError:
+        return None
+
+
 def list_drive_audio(drive_svc) -> list[dict]:
-    files, page_token = [], None
-    while True:
-        resp = drive_svc.files().list(
-            q=(
-                f"'{DRIVE_FOLDER_ID}' in parents and "
-                "(mimeType contains 'audio/' or mimeType contains 'video/')"
-            ),
-            fields="nextPageToken, files(id, name, mimeType)",
-            pageToken=page_token,
-        ).execute()
-        files.extend(resp.get("files", []))
-        page_token = resp.get("nextPageToken")
-        if not page_token:
-            break
-    return files
+    """Recursively walk the Drive folder hierarchy and return all audio files.
+
+    Expected structure:
+      <root> / Daily_Backups / recordings / <year> / <month> / <day> / <hour> / file.mp3
+    """
+    audio_files: list[dict] = []
+    AUDIO_EXTS = set(MIME_MAP.keys())
+
+    def _walk(folder_id: str, path: str = "") -> None:
+        page_token = None
+        while True:
+            resp = drive_svc.files().list(
+                q=f"'{folder_id}' in parents and trashed = false",
+                fields="nextPageToken, files(id, name, mimeType)",
+                pageToken=page_token,
+                pageSize=1000,
+            ).execute()
+            for item in resp.get("files", []):
+                if item["mimeType"] == "application/vnd.google-apps.folder":
+                    _walk(item["id"], f"{path}/{item['name']}")
+                else:
+                    mime = item["mimeType"]
+                    ext  = Path(item["name"]).suffix.lower()
+                    if mime.startswith("audio/") or mime.startswith("video/") or ext in AUDIO_EXTS:
+                        item["_path"] = f"{path}/{item['name']}"
+                        audio_files.append(item)
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+
+    _walk(DRIVE_FOLDER_ID)
+    print(f"Drive walk complete — {len(audio_files)} audio files found")
+    return audio_files
 
 
 # ── Stage 2: Transcription ────────────────────────────────────────────────────
@@ -179,46 +332,47 @@ def build_prompt(
     transcript: str,
     duration_seconds: float | None = None,
 ) -> str:
-    def param_line(p: dict) -> str:
-        criteria = f" — \"{p['description']}\"" if p.get("description") else ""
-        if p.get("type") == "yes_no":
-            return f"  - {p['name']}{criteria}: YES={p['max_score']} / NO=0  ← BINARY ONLY, no partial credit"
-        if p.get("type") == "categorical":
-            return f"  - {p['name']}{criteria}: integer 0–{p['max_score']}  ← pick the closest level"
-        return f"  - {p['name']}{criteria}: integer 0–{p['max_score']}"
-
-    param_lines   = "\n".join(param_line(p) for p in rubric_params)
-    scoring_rules = (
-        "## SCORING RULES\n"
-        "1. YES/NO parameters (marked BINARY): score must be EITHER 0 OR the full max — never 1 on a max-2 parameter.\n"
-        "2. Only award YES if the thing clearly happened. If absent, uncertain, or cut short → 0.\n"
-        "3. Numeric parameters: use the full range 0–max, be proportional to quality.\n"
-        "4. Agent name: identify the sales agent's first name from their self-introduction "
-        '(e.g. "Hi, I\'m Priya from SuperSheldon"). Use null if unclear.\n'
-        f"5. COMPLETENESS: you MUST return a score for every single one of the {len(rubric_params)} parameters listed. "
-        "Never skip or omit a parameter. If something clearly did not happen, score it 0."
-    )
-    meta_section = ""
     if duration_seconds is not None:
         mins   = int(duration_seconds // 60)
         secs   = round(duration_seconds % 60)
         longer = "YES" if duration_seconds > 180 else "NO"
         meta_section = (
-            f"\n\n## Call Metadata\n"
-            f"- Duration: {mins}m {secs}s ({round(duration_seconds)}s total)\n"
-            f"- Longer than 3 minutes: {longer}"
+            f"\n## CALL METADATA\n"
+            f"Duration: {mins}m {secs}s ({round(duration_seconds)}s total) — "
+            f"Longer than 3 minutes: {longer}"
         )
+    else:
+        meta_section = "\n## CALL METADATA\nDuration: not available"
+
+    rubric_section = "\n\n".join(_build_param_rubric(p) for p in rubric_params)
+
     return (
-        SYSTEM_PROMPT
-        + f"\n\n{scoring_rules}"
-        + meta_section
-        + f"\n\n## Rubric Parameters (all {len(rubric_params)} must be scored)\n{param_lines}"
-        + "\n\nFull rubric definition (JSON):\n"
-        + json.dumps(rubric_params, indent=2)
-        + f"\n\n## Call Transcript\n{transcript}"
-        + f"\n\nRespond ONLY with a JSON object containing exactly {len(rubric_params)} score entries: "
-        + '{"agent_name":"<first name or null>","scores":[{"parameter":"<name>","score":<integer>,"reasoning":"<1-2 sentences>"},...]}. '
-        + "Extract the agent's first name from their self-introduction. Use null if unclear."
+        SCORE_CONTEXT + "\n\n"
+        "## MANDATORY SCORING PROCESS — follow for EVERY parameter\n"
+        "You MUST work through these steps in order for each parameter. Do not skip any step.\n\n"
+        "  STEP 1 — EXTRACT: Find and quote the exact words from the transcript relevant to this parameter.\n"
+        "            If nothing relevant was said, write \"NO EVIDENCE FOUND\".\n"
+        "  STEP 2 — CHECK: Evaluate each sub-criterion using ONLY the extracted quote.\n"
+        "            Answer YES or NO for each. Do not infer, assume, or give credit for implied behaviour.\n"
+        "  STEP 3 — SCORE: Derive the score mechanically from Step 2 (sum of YES points, or binary verdict).\n"
+        "            The score must follow directly from Step 2 — do not adjust based on overall call feel.\n\n"
+        "Place the output of all three steps in the \"reasoning\" field of each score entry.\n\n"
+        "## ABSOLUTE RULES\n"
+        "1. Score ONLY what is LITERALLY SAID. Never award credit for likely, implied, or probable behaviour.\n"
+        "2. Ambiguous or unclear evidence → score the LOWER possibility (conservative scoring).\n"
+        "3. BINARY parameters: score is EITHER 0 OR the full max — NEVER anything in between.\n"
+        "4. Call Duration: use ONLY the provided Call Metadata — NEVER estimate from transcript length.\n"
+        f"5. You MUST score all {len(rubric_params)} parameters. If something did not happen, score it 0.\n"
+        "6. Agent name: extract from the agent's self-introduction only. Use null if not heard.\n"
+        + meta_section + "\n\n"
+        "## PARAMETER RUBRICS\n"
+        + rubric_section + "\n\n"
+        "## CALL TRANSCRIPT\n"
+        + transcript + "\n\n"
+        "## RESPONSE FORMAT\n"
+        "Respond ONLY with valid JSON — no markdown fences, no extra text:\n"
+        '{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: \'...\' | sub-criteria results | SCORE: N>"}]}\n'
+        f"You must return exactly {len(rubric_params)} score objects — one per parameter above, using the exact parameter name shown."
     )
 
 
@@ -230,7 +384,7 @@ def score_transcript(
     prompt = build_prompt(rubric_params, transcript, duration_seconds)
     text   = gemini_post({
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1},
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
     })
     parsed = json.loads(text)
     return parsed.get("scores", []), parsed.get("agent_name") or None
@@ -372,7 +526,8 @@ def main() -> None:
     for file in new_files:
         name = file["name"]
         fid  = file["id"]
-        print(f"\n→ {name}")
+        path = file.get("_path", name)
+        print(f"\n→ {path}")
         try:
             # 1. Download from Drive
             suffix = Path(name).suffix or ".mp3"
@@ -403,11 +558,23 @@ def main() -> None:
             os.unlink(tmp_path)
 
             # 5. Save call to Supabase
+            recorded_dt = parse_filename_datetime(name)
+            metadata = {
+                "filename":    name,
+                "source":      "auto-pipeline",
+                "drive_path":  path,
+            }
+            if recorded_dt:
+                metadata["recorded_at"]   = recorded_dt.isoformat()
+                metadata["recorded_date"] = recorded_dt.strftime("%Y-%m-%d")
+                metadata["recorded_time"] = recorded_dt.strftime("%I:%M:%S %p")
+                print(f"  Recorded: {recorded_dt.strftime('%d %b %Y %I:%M %p')}")
+
             call_payload = {
                 "drive_link": f"https://drive.google.com/open?id={fid}",
                 "transcript": transcript,
                 "status":     "transcribed",
-                "metadata":   {"filename": name, "source": "auto-pipeline"},
+                "metadata":   metadata,
                 "source_row": 0,
             }
             if duration_seconds is not None:
@@ -420,7 +587,7 @@ def main() -> None:
             print(f"  Scored: {len(scores)} params" + (f" · Agent: {agent_name}" if agent_name else ""))
             if agent_name:
                 supabase_client.table("calls").update({
-                    "metadata": {"filename": name, "source": "auto-pipeline", "agent_name": agent_name}
+                    "metadata": {**metadata, "agent_name": agent_name}
                 }).eq("id", call_id).execute()
 
             # 7. Save scores — fill any parameters Gemini skipped with score 0

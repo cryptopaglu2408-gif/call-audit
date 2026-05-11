@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import {
   ExternalLink, RefreshCw, Clock, Zap, CheckCircle2, XCircle,
-  Send, Copy, Upload, FileAudio, AlertCircle, Trash2, Play,
+  Send, Copy, Upload, FileAudio, AlertCircle, Trash2, Play, RotateCcw,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { transcribeAudio, scoreTranscript, getFileDuration } from '../lib/gemini'
@@ -457,8 +457,22 @@ function ManualUploadTab() {
     const items = Array.from(newFiles).map(f => ({
       id: crypto.randomUUID(), file: f, status: 'pending',
       error: null, callId: null, scores: null, overallPct: null,
+      // cached intermediate results — survive retries so we skip completed stages
+      transcript: null, durationSeconds: null, agentName: null, enrichedScores: null,
     }))
     setFiles(prev => [...prev, ...items])
+  }
+
+  function retryFile(id) {
+    setFiles(prev => prev.map(f =>
+      f.id === id ? { ...f, status: 'pending', error: null } : f
+    ))
+  }
+
+  function retryAll() {
+    setFiles(prev => prev.map(f =>
+      f.status === 'error' ? { ...f, status: 'pending', error: null } : f
+    ))
   }
 
   function removeFile(id) {
@@ -497,44 +511,60 @@ function ManualUploadTab() {
     setProc(true)
 
     for (const item of pending) {
-      const durationSeconds = await getFileDuration(item.file)
+      // ── Stage 1: duration (always cheap, re-run) ──────────────────────────
+      const durationSeconds = item.durationSeconds ?? await getFileDuration(item.file)
+      if (item.durationSeconds == null) updateFile(item.id, { durationSeconds })
 
-      updateFile(item.id, { status: 'transcribing' })
-      let transcript
-      try {
-        transcript = await transcribeAudio(item.file)
-      } catch (err) {
-        updateFile(item.id, { status: 'error', error: `Transcription failed: ${err.message}` })
-        continue
+      // ── Stage 2: transcription (skip if cached from a previous attempt) ───
+      let transcript = item.transcript
+      if (!transcript) {
+        updateFile(item.id, { status: 'transcribing' })
+        try {
+          transcript = await transcribeAudio(item.file)
+          updateFile(item.id, { transcript })   // cache so retries skip this stage
+        } catch (err) {
+          updateFile(item.id, { status: 'error', error: `Transcription failed: ${err.message}` })
+          continue
+        }
+      } else {
+        updateFile(item.id, { status: 'scoring' })   // show progress even when skipping
       }
 
-      updateFile(item.id, { status: 'scoring' })
-      let scores, agentName
-      try {
-        const result = await scoreTranscript(transcript, rubric.parameters, { durationSeconds })
-        scores    = result.scores
-        agentName = result.agentName
-      } catch (err) {
-        updateFile(item.id, { status: 'error', error: `Scoring failed: ${err.message}` })
-        continue
+      // ── Stage 3: scoring (skip if cached) ────────────────────────────────
+      let enrichedScores = item.enrichedScores
+      let agentName      = item.agentName
+      if (!enrichedScores) {
+        updateFile(item.id, { status: 'scoring' })
+        let rawScores
+        try {
+          const result = await scoreTranscript(transcript, rubric.parameters, { durationSeconds })
+          rawScores = result.scores
+          agentName = result.agentName
+        } catch (err) {
+          updateFile(item.id, { status: 'error', error: `Scoring failed: ${err.message}` })
+          continue
+        }
+
+        const scoredNames   = new Set(rawScores.map(s => s.parameter))
+        const missingScores = rubric.parameters
+          .filter(p => !scoredNames.has(p.name))
+          .map(p => ({ parameter: p.name, score: 0, reasoning: '', max_score: p.max_score }))
+        const rubricOrder   = Object.fromEntries(rubric.parameters.map((p, i) => [p.name, i]))
+        enrichedScores = [...rawScores.map(s => ({
+          ...s,
+          max_score: rubric.parameters.find(p => p.name === s.parameter)?.max_score ?? 10,
+        })), ...missingScores].sort((a, b) => (rubricOrder[a.parameter] ?? 999) - (rubricOrder[b.parameter] ?? 999))
+
+        updateFile(item.id, { enrichedScores, agentName })  // cache so retries skip this stage
+      } else {
+        updateFile(item.id, { status: 'saving' })
       }
-
-      // Enrich scores with max_score from rubric, fill any missing params, sort by rubric order
-      const scoredNames   = new Set(scores.map(s => s.parameter))
-      const missingScores = rubric.parameters
-        .filter(p => !scoredNames.has(p.name))
-        .map(p => ({ parameter: p.name, score: 0, reasoning: '', max_score: p.max_score }))
-
-      const rubricOrder = Object.fromEntries(rubric.parameters.map((p, i) => [p.name, i]))
-      const enrichedScores = [...scores.map(s => ({
-        ...s,
-        max_score: rubric.parameters.find(p => p.name === s.parameter)?.max_score ?? 10,
-      })), ...missingScores].sort((a, b) => (rubricOrder[a.parameter] ?? 999) - (rubricOrder[b.parameter] ?? 999))
 
       const overallPct = enrichedScores.length
         ? Math.round(enrichedScores.reduce((a, s) => a + s.score / s.max_score, 0) / enrichedScores.length * 100)
         : null
 
+      // ── Stage 4: save to Supabase ─────────────────────────────────────────
       updateFile(item.id, { status: 'saving' })
       try {
         const { data: callRow, error: callErr } = await supabase.from('calls').insert({
@@ -544,16 +574,15 @@ function ManualUploadTab() {
           source_row: 0,
           ...(durationSeconds != null ? { duration_seconds: Math.round(durationSeconds) } : {}),
         }).select('id').single()
-
         if (callErr) throw callErr
         const callId = callRow.id
 
-        const scoreRows = scores.map(s => ({
+        const scoreRows = enrichedScores.map(s => ({
           call_id:   callId,
           rubric_id: rubric.id,
           parameter: s.parameter,
           score:     s.score,
-          max_score: rubric.parameters.find(p => p.name === s.parameter)?.max_score ?? 10,
+          max_score: s.max_score,
           reasoning: s.reasoning || '',
         }))
         const { error: scoresErr } = await supabase.from('scores').insert(scoreRows)
@@ -563,7 +592,6 @@ function ManualUploadTab() {
         updateFile(item.id, { status: 'done', callId, scores: enrichedScores, overallPct })
         setExpanded(prev => new Set(prev).add(item.id))
 
-        // Slack notification for calls > 3 minutes
         sendCallToSlack(item.file, enrichedScores, rubric.parameters, agentName, durationSeconds, overallPct)
           .catch(e => console.warn('Slack notification failed:', e))
       } catch (err) {
@@ -636,11 +664,19 @@ function ManualUploadTab() {
               {errorCount > 0 && <span className="text-[11px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full font-bold">{errorCount} failed</span>}
               {activeCount > 0 && <span className="text-[11px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full font-bold animate-pulse">Processing…</span>}
             </div>
-            {doneCount > 0 && (
-              <button onClick={clearDone} className="text-xs font-medium text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors">
-                <Trash2 size={11}/> Clear done
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {errorCount > 0 && !processing && (
+                <button onClick={retryAll}
+                  className="flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors">
+                  <RotateCcw size={11}/> Retry all failed
+                </button>
+              )}
+              {doneCount > 0 && (
+                <button onClick={clearDone} className="text-xs font-medium text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors">
+                  <Trash2 size={11}/> Clear done
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="divide-y divide-slate-50">
@@ -675,10 +711,10 @@ function ManualUploadTab() {
                     {/* Done: verdict + score + expand toggle */}
                     {item.status === 'done' && item.overallPct !== null ? (
                       <>
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold animate-pop-in ${isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
                           {isApproved ? '✓ Approved' : '✕ Rejected'}
                         </span>
-                        <span className={`text-sm font-black tabular ${isApproved ? 'text-emerald-600' : 'text-rose-500'}`}>
+                        <span className={`text-sm font-black tabular animate-pop-in ${isApproved ? 'text-emerald-600' : 'text-rose-500'}`}>
                           {item.overallPct}%
                         </span>
                         <button
@@ -688,6 +724,14 @@ function ManualUploadTab() {
                           {isExpanded ? '▲ Hide' : '▼ Scores'}
                         </button>
                       </>
+                    ) : item.status === 'error' ? (
+                      <button
+                        onClick={() => retryFile(item.id)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-500 border border-rose-200 hover:border-rose-500 px-3 py-1.5 rounded-lg transition-all shrink-0"
+                        title={item.transcript ? (item.enrichedScores ? 'Retry saving to Supabase' : 'Retry scoring (transcript cached)') : 'Retry from scratch'}
+                      >
+                        <RotateCcw size={11}/> Retry
+                      </button>
                     ) : item.status === 'pending' ? (
                       <button onClick={() => removeFile(item.id)} className="p-1.5 text-slate-300 hover:text-slate-500 rounded-lg transition-colors">
                         <Trash2 size={13} />
