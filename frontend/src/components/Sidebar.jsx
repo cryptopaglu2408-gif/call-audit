@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users } from 'lucide-react'
+import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 const links = [
   { to: '/',         label: 'Dashboard', Icon: LayoutDashboard },
@@ -10,6 +11,10 @@ const links = [
 ]
 
 export default function Sidebar() {
+  const { user, signOut } = useAuth()
+  const initials = user?.email?.split('@')[0]?.slice(0, 2).toUpperCase() ?? '?'
+  const username = user?.email?.split('@')[0] ?? ''
+
   return (
     <aside className="w-[72px] hover:w-[240px] bg-gradient-to-b from-[#0d1117] to-[#05070a] flex flex-col shrink-0 border-r border-white/5 transition-all duration-300 ease-in-out group z-20">
       {/* Brand */}
@@ -59,6 +64,26 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* User + logout */}
+      <div className="px-4 py-5 border-t border-white/5">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/10">
+            <span className="text-white/70 text-xs font-bold">{initials}</span>
+          </div>
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex-1 min-w-0">
+            <p className="text-white/70 text-xs font-semibold truncate">{username}</p>
+            <p className="text-white/25 text-[10px] font-medium">supersheldon.com</p>
+          </div>
+          <button
+            onClick={signOut}
+            title="Sign out"
+            className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-1.5 text-white/30 hover:text-rose-400 hover:bg-white/5 rounded-lg transition-colors shrink-0"
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
+      </div>
     </aside>
   )
 }
