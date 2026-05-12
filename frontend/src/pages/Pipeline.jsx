@@ -4,7 +4,7 @@ import {
   Send, Copy, Upload, FileAudio, AlertCircle, Trash2, Play, RotateCcw,
 } from 'lucide-react'
 import { supabase, fetchAllScores } from '../lib/supabase'
-import { transcribeAudio, scoreTranscript, getFileDuration } from '../lib/gemini'
+import { transcribeAudio, scoreTranscript, getFileDuration, getMimeType } from '../lib/gemini'
 import Spinner from '../components/Spinner'
 
 const DRIVE_URL    = 'https://drive.google.com/drive/folders/1qAA2I00k827z55_4P2LUNyijgG-1-PxZ'
@@ -487,6 +487,28 @@ async function sendCallToSlack(file, enrichedScores, rubricParams, agentName, du
   }).catch(e => console.warn('Slack message failed:', e))
 }
 
+// ─── Drive upload helper ──────────────────────────────────────────────────────
+async function uploadToDrive(file, callId) {
+  const mimeType = getMimeType(file)
+  const { data, error } = await supabase.functions.invoke('drive-upload-url', {
+    body: { filename: file.name, mimeType },
+  })
+  if (error || !data?.uploadUrl) throw new Error(error?.message || 'No upload URL')
+
+  const uploadRes = await fetch(data.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType, 'Content-Length': String(file.size) },
+    body: file,
+  })
+  if (!uploadRes.ok && uploadRes.status !== 308) throw new Error(`Drive PUT failed: ${uploadRes.status}`)
+
+  const driveData = await uploadRes.json().catch(() => null)
+  if (driveData?.id) {
+    const driveLink = `https://drive.google.com/file/d/${driveData.id}/view`
+    await supabase.from('calls').update({ drive_link: driveLink }).eq('id', callId)
+  }
+}
+
 // ─── Manual Upload Tab ───────────────────────────────────────────────────────
 const AUDIO_ACCEPT = '.mp3,.mp4,.m4a,.wav,.ogg,.webm,.aac,.flac,.mpeg'
 
@@ -645,6 +667,9 @@ function ManualUploadTab() {
         await supabase.from('calls').update({ status: 'done' }).eq('id', callId)
         updateFile(item.id, { status: 'done', callId, scores: enrichedScores, overallPct })
         setExpanded(prev => new Set(prev).add(item.id))
+
+        // Upload to Drive manual folder (best-effort, non-blocking)
+        uploadToDrive(item.file, callId).catch(e => console.warn('Drive upload failed:', e))
 
         sendCallToSlack(item.file, enrichedScores, rubric.parameters, agentName, durationSeconds, overallPct)
           .catch(e => console.warn('Slack notification failed:', e))

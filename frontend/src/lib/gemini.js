@@ -1,6 +1,6 @@
 const API_KEY  = import.meta.env.VITE_GEMINI_API_KEY
-const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
-const MODEL    = 'gemini-2.5-flash'
+const BASE_URL = 'https://aiplatform.googleapis.com/v1'
+const MODEL    = 'publishers/google/models/gemini-2.5-flash'
 
 const MIME_MAP = {
   mp3:  'audio/mpeg',
@@ -159,7 +159,7 @@ function fileToBase64(file) {
   })
 }
 
-function getMimeType(file) {
+export function getMimeType(file) {
   if (file.type && file.type !== 'application/octet-stream') return file.type
   const ext = file.name.split('.').pop().toLowerCase()
   return MIME_MAP[ext] || 'audio/mpeg'
@@ -172,7 +172,7 @@ const UPLOAD_BASE_URL  = 'https://generativelanguage.googleapis.com/upload/v1bet
 
 async function callGemini(body) {
   const res = await fetch(
-    `${BASE_URL}/models/${MODEL}:generateContent?key=${API_KEY}`,
+    `${BASE_URL}/${MODEL}:generateContent?key=${API_KEY}`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   )
   if (!res.ok) {
@@ -244,7 +244,7 @@ export async function transcribeAudio(file) {
   }
 
   const text = await callGemini({
-    contents: [{ parts: [{ text: TRANSCRIBE_PROMPT }, audioPart] }],
+    contents: [{ role: 'user', parts: [{ text: TRANSCRIBE_PROMPT }, audioPart] }],
     generationConfig: { temperature: 0.0 },
   })
 
@@ -294,7 +294,7 @@ Respond ONLY with valid JSON — no markdown fences, no extra text:
 You must return exactly ${rubricParams.length} score objects — one per parameter above, using the exact parameter name shown.`
 
   const text = await callGemini({
-    contents: [{ parts: [{ text: prompt }] }],
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       responseMimeType: 'application/json',
       temperature: 0,   // deterministic — same transcript → same scores every time
