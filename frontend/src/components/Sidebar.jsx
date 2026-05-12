@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const links = [
@@ -8,6 +8,7 @@ const links = [
   { to: '/agents',   label: 'Agents',    Icon: Users },
   { to: '/rubric',   label: 'Rubric',    Icon: SlidersHorizontal },
   { to: '/pipeline', label: 'Pipeline',  Icon: Workflow },
+  { to: '/slack',    label: 'Slack',     Icon: MessageSquare },
 ]
 
 export default function Sidebar() {

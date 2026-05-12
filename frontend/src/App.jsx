@@ -6,6 +6,7 @@ import Results from './pages/Results'
 import Rubric from './pages/Rubric'
 import Pipeline from './pages/Pipeline'
 import Agents from './pages/Agents'
+import Slack from './pages/Slack'
 import Login from './pages/Login'
 import Spinner from './components/Spinner'
 
@@ -31,6 +32,7 @@ function AppLayout() {
           <Route path="/agents"   element={<Agents />} />
           <Route path="/rubric"   element={<Rubric />} />
           <Route path="/pipeline" element={<Pipeline />} />
+          <Route path="/slack"    element={<Slack />} />
         </Routes>
       </main>
     </div>
