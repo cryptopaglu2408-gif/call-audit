@@ -84,7 +84,6 @@ export default function Slack() {
   const [includeLink, setIncludeLink]     = useState(true)
   const [includeDuration, setIncludeDuration] = useState(true)
   const [headerText, setHeaderText]       = useState('')
-  const [webhookOverride, setWebhookOverride] = useState('')
 
   async function load() {
     setLoading(true)
@@ -153,7 +152,7 @@ export default function Slack() {
   const config = { format, includeLink, includeDuration, headerText }
 
   async function sendSelected() {
-    const webhook = webhookOverride || WEBHOOK
+    const webhook = WEBHOOK
     if (!webhook) {
       setSendResult({ ok: false, msg: 'No webhook URL. Set VITE_SLACK_WEBHOOK or paste one in the config panel.' })
       setTimeout(() => setSendResult(null), 5000)
@@ -430,21 +429,11 @@ export default function Slack() {
               />
             </div>
 
-            {/* Webhook */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Webhook URL</label>
-              <input
-                type="text" value={webhookOverride} onChange={e => setWebhookOverride(e.target.value)}
-                placeholder={WEBHOOK ? '(using env VITE_SLACK_WEBHOOK)' : 'https://hooks.slack.com/services/…'}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all font-mono text-xs"
-              />
-              {WEBHOOK && !webhookOverride && (
-                <p className="text-[11px] font-medium text-emerald-600 mt-1.5">✓ Webhook set via environment variable</p>
-              )}
-              {!WEBHOOK && !webhookOverride && (
-                <p className="text-[11px] font-medium text-amber-600 mt-1.5">⚠ No webhook — paste one above or set VITE_SLACK_WEBHOOK</p>
-              )}
-            </div>
+            {/* Webhook status */}
+            {WEBHOOK
+              ? <p className="text-[11px] font-medium text-emerald-600">✓ Webhook configured via environment</p>
+              : <p className="text-[11px] font-medium text-amber-600">⚠ No webhook — set VITE_SLACK_WEBHOOK in environment</p>
+            }
           </div>
 
           {/* Preview */}
