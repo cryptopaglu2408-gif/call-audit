@@ -280,7 +280,7 @@ export default function Results() {
             />
           </div>
         </div>
-        <div className="overflow-y-auto flex-1 p-3 space-y-1">
+        <div className="overflow-y-auto flex-1 p-3 pb-24 space-y-1">
           {filtered.map(c => {
             const filename = c.metadata?.filename || `call-${c.id.slice(0,8)}`
             const dur      = c.duration_seconds ? `${(c.duration_seconds/60).toFixed(1)}m` : null
@@ -342,7 +342,7 @@ export default function Results() {
       </div>
 
       {/* Right: detail */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-8 pb-24">
         {!selected ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <div className="w-16 h-16 bg-white rounded-[24px] shadow-sm border border-gray-100 flex items-center justify-center mb-4">
