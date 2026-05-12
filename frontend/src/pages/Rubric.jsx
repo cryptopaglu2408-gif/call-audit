@@ -51,7 +51,7 @@ export default function Rubric() {
   async function load() {
     const [{ data: r }, { data: s }] = await Promise.all([
       supabase.from('rubrics').select('*').order('created_at', { ascending: false }),
-      supabase.from('scores').select('rubric_id, parameter, score, max_score'),
+      supabase.from('scores').select('rubric_id, parameter, score, max_score').limit(10000),
     ])
     setRubrics(r || [])
     setAllScores(s || [])

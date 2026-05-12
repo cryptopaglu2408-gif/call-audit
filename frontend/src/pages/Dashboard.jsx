@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, AreaChart, Area, ReferenceLine,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   Legend,
 } from 'recharts'
-import { AlertTriangle, SlidersHorizontal, TrendingDown, Phone, Check, Star, Trophy } from 'lucide-react'
+import { AlertTriangle, SlidersHorizontal, TrendingDown, TrendingUp, ArrowRight, Phone, Check, Star, Trophy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import KPICard from '../components/KPICard'
 import Spinner from '../components/Spinner'
@@ -54,12 +55,12 @@ const BarScoreLabel = ({ x, y, width, height, value }) => (
 
 function Card({ title, sub, action, children, className = '' }) {
   return (
-    <div className={`bg-white/80 backdrop-blur-md rounded-2xl shadow-lg shadow-slate-100/50 border border-slate-100/80 p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-0.5 transition-all duration-300 ${className}`}>
+    <div className={`bg-white rounded-[32px] p-6 shadow-sm border border-gray-100/50 transition-all duration-300 ${className}`}>
       {(title || action) && (
         <div className="flex items-start justify-between mb-5 gap-3">
           <div>
-            {title && <h2 className="text-sm font-bold text-slate-800 tracking-tight">{title}</h2>}
-            {sub && <p className="text-xs text-slate-400 mt-0.5 font-medium">{sub}</p>}
+            {title && <h2 className="text-lg font-bold text-gray-900 tracking-tight">{title}</h2>}
+            {sub && <p className="text-xs text-gray-400 mt-0.5 font-medium">{sub}</p>}
           </div>
           {action}
         </div>
@@ -81,10 +82,10 @@ function StatusBadge({ status }) {
 
 function RangePicker({ value, onChange }) {
   return (
-    <div className="flex items-center gap-1 bg-slate-100/80 backdrop-blur-sm p-1 rounded-xl border border-slate-200/50">
+    <div className="flex items-center gap-2">
       {RANGES.map(r => (
         <button key={r.value} onClick={() => onChange(r.value)}
-          className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${value === r.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          className={`px-4 py-2 text-xs font-semibold rounded-full transition-all ${value === r.value ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
           {r.label}
         </button>
       ))}
@@ -117,7 +118,7 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       supabase.from('calls').select('id, status, created_at, duration_seconds, metadata').order('created_at', { ascending: false }),
-      supabase.from('scores').select('call_id, parameter, score, max_score'),
+      supabase.from('scores').select('call_id, parameter, score, max_score').limit(10000),
     ]).then(([{ data: c }, { data: s }]) => {
       setCalls(c || [])
       setScores(s || [])
@@ -234,122 +235,182 @@ export default function Dashboard() {
 
   const scoredCount = zones.red + zones.yellow + zones.green
 
-  return (
-    <div className="min-h-full">
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-slate-100/50 px-8 py-5 flex items-center justify-between gap-4 sticky top-0 z-10">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-0.5 font-medium">Showing {filteredCalls.length} calls</p>
-        </div>
-        <RangePicker value={range} onChange={setRange} />
-      </div>
+  const today = new Date()
+  const dayNum = today.getDate()
+  const dayName = today.toLocaleDateString('en-AU', { weekday: 'short' })
+  const monthName = today.toLocaleDateString('en-AU', { month: 'long' })
 
-      <div className="p-8 max-w-7xl mx-auto space-y-6">
+  return (
+    <div className="min-h-full bg-[#f8f9fa] p-8">
+
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Top KPI Section (Image Style) */}
+        <div className="grid grid-cols-12 gap-6">
+          {/* Big Card (Visa style) */}
+          <div className="col-span-12 lg:col-span-4 bg-white rounded-[32px] p-6 shadow-sm border border-gray-100/50 flex flex-col justify-between h-[220px]">
+            <div>
+              <div className="flex justify-between items-start">
+                <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Total Calls</span>
+                <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1 rounded-full">All Time</span>
+              </div>
+              <h2 className="text-5xl font-bold text-gray-900 mt-4">{total.toLocaleString()}</h2>
+              <p className="text-xs text-gray-400 mt-1 font-medium">Calls processed in selected range</p>
+            </div>
+            <div className="flex gap-2">
+              <Link to="/results" className="bg-black text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-gray-800 transition-colors inline-block text-center">View Calls</Link>
+            </div>
+          </div>
+
+          {/* Middle Cards (Income/Paid style) */}
+          <div className="col-span-12 lg:col-span-4 grid grid-rows-2 gap-4 h-[220px]">
+            <div className="bg-white rounded-[24px] p-5 shadow-sm border border-gray-100/50 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-gray-400">Audited Calls</span>
+                <h3 className="text-3xl font-bold text-gray-900 mt-1">{audited.toLocaleString()}</h3>
+              </div>
+              <span className="text-xs font-bold text-emerald-500 bg-emerald-50 px-3 py-1.5 rounded-full">
+                {total ? `${Math.round(audited/total*100)}%` : '0%'}
+              </span>
+            </div>
+            <div className="bg-white rounded-[24px] p-5 shadow-sm border border-gray-100/50 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-gray-400">Failed Calls</span>
+                <h3 className="text-3xl font-bold text-gray-900 mt-1">{failed.toLocaleString()}</h3>
+              </div>
+              <span className="text-xs font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full">
+                {failed ? `${Math.round(failed/total*100)}%` : '0%'}
+              </span>
+            </div>
+          </div>
+
+          {/* Right Card (Lock/Growth style) */}
+          <div className="col-span-12 lg:col-span-4 bg-white rounded-[32px] p-6 shadow-sm border border-gray-100/50 flex flex-col justify-between h-[220px]">
+            <div className="flex justify-between items-start">
+              <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Avg Score</span>
+              <RangePicker value={range} onChange={setRange} />
+            </div>
+            <div className="flex items-center gap-6 mt-2">
+              <div className="relative shrink-0 w-20 h-20">
+                <div className="w-full h-full rounded-full border-4 border-gray-100 flex items-center justify-center">
+                  <span className={`text-xl font-bold ${scoreTextClass(avgScore)}`}>{avgScore}%</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800">Quality Index</p>
+                <p className="text-xs text-gray-400 font-medium mt-0.5">Average score across all audited calls.</p>
+              </div>
+            </div>
+            <div className="text-xs text-gray-400 font-medium flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Live data updated
+            </div>
+          </div>
+        </div>
+
         {/* Flagged banner */}
         {flagged.length > 0 && (
-          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
-            <AlertTriangle size={16} className="text-amber-500 shrink-0" />
-            <p className="text-sm font-bold text-amber-800">
+          <div className="flex items-center gap-3 bg-white border border-gray-100/50 rounded-[24px] px-6 py-4 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+              <AlertTriangle size={14} className="text-amber-500" />
+            </div>
+            <p className="text-sm font-bold text-gray-700">
               {flagged.length} call{flagged.length > 1 ? 's' : ''} scored below {threshold}%
             </p>
-            <a href="#flagged" className="ml-auto text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
-              View →
+            <a href="#flagged" className="ml-auto text-xs font-bold text-white bg-black hover:bg-gray-800 px-4 py-2 rounded-full transition-colors">
+              View Flagged
             </a>
           </div>
         )}
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard label="Total Calls"  value={total.toLocaleString()}                    icon={<Phone size={18} className="text-white" />} accent="blue" />
-          <KPICard label="Audited"      value={audited.toLocaleString()}                  icon={<Check size={18} className="text-white" />} accent="green" sub={total ? `${Math.round(audited/total*100)}% of total` : '—'} />
-          <KPICard label="Avg Score"    value={avgScore !== null ? `${avgScore}%` : '—'}  icon={<Star size={18} className="text-white" />} accent="purple" />
-          <KPICard label="Failed"       value={failed.toLocaleString()}                   icon={<AlertTriangle size={18} className="text-white" />} accent="red" sub={failed ? `${Math.round(failed/total*100)}% error rate` : 'No errors'} />
-        </div>
-
-        {/* Performance Zones + Daily Trend */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Performance Zones donut */}
-          <Card title="Performance Zones" sub="Calls grouped by overall score">
-            {scoredCount === 0 ? <p className="text-sm text-slate-400">No scored calls in this range.</p> : (
-              <div className="flex items-center gap-8">
-                <div className="relative shrink-0">
-                  <ResponsiveContainer width={160} height={160}>
-                    <PieChart>
-                      <Pie data={zonesData} cx="50%" cy="50%" innerRadius={48} outerRadius={72}
-                        dataKey="value" strokeWidth={3} stroke="#fff" paddingAngle={2}>
-                        {zonesData.map(z => <Cell key={z.name} fill={z.color} />)}
-                      </Pie>
-                      <Tooltip content={<DarkTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {avgScore !== null && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className={`text-2xl font-black tabular ${scoreTextClass(avgScore)}`}>{avgScore}%</span>
-                      <span className="text-[10px] text-slate-400 font-semibold">avg</span>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-4 flex-1">
-                  {[
-                    { color:'#10b981', label:'Good (71–100%)',    count: zones.green },
-                    { color:'#f59e0b', label:'Average (51–70%)',  count: zones.yellow },
-                    { color:'#ef4444', label:'Critical (≤50%)',   count: zones.red },
-                  ].map(z => (
-                    <div key={z.label}>
-                      <ZonePill {...z} total={scoredCount} />
-                      <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${scoredCount ? z.count/scoredCount*100 : 0}%`, background: z.color }} />
+        {/* Charts Grid */}
+        <div className="grid grid-cols-12 gap-6">
+          {/* Performance Zones */}
+          <div className="col-span-12 lg:col-span-4">
+            <Card title="Performance Zones" sub="Calls grouped by overall score" className="h-full">
+              {scoredCount === 0 ? <p className="text-sm text-slate-400">No scored calls in this range.</p> : (
+                <div className="flex flex-col items-center">
+                  <div className="relative shrink-0 mb-4">
+                    <ResponsiveContainer width={160} height={160}>
+                      <PieChart>
+                        <Pie data={zonesData} cx="50%" cy="50%" innerRadius={48} outerRadius={72}
+                          dataKey="value" strokeWidth={3} stroke="#fff" paddingAngle={2}>
+                          {zonesData.map(z => <Cell key={z.name} fill={z.color} />)}
+                        </Pie>
+                        <Tooltip content={<DarkTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {avgScore !== null && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className={`text-2xl font-black tabular ${scoreTextClass(avgScore)}`}>{avgScore}%</span>
+                        <span className="text-[10px] text-slate-400 font-semibold">avg</span>
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                  <div className="space-y-3 w-full">
+                    {[
+                      { color:'#10b981', label:'Good (71–100%)',    count: zones.green },
+                      { color:'#f59e0b', label:'Average (51–70%)',  count: zones.yellow },
+                      { color:'#ef4444', label:'Critical (≤50%)',   count: zones.red },
+                    ].map(z => (
+                      <div key={z.label}>
+                        <ZonePill {...z} total={scoredCount} />
+                        <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${scoredCount ? z.count/scoredCount*100 : 0}%`, background: z.color }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </Card>
+              )}
+            </Card>
+          </div>
 
           {/* Daily avg score */}
-          <Card title="Daily Avg Score" sub="Last 14 days with data · dashed line = 60% target">
-            {trendData.length === 0 ? <p className="text-sm text-slate-400">No score data in this range.</p> : (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={trendData} barSize={28} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                  <defs>
-                    {trendData.map((d, i) => (
-                      <linearGradient key={i} id={`bar${i}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={scoreColor(d.Score)} stopOpacity={1} />
-                        <stop offset="100%" stopColor={scoreColor(d.Score)} stopOpacity={0.7} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0,100]} tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} width={36} />
-                  <ReferenceLine y={60} stroke="#64748b" strokeDasharray="5 3" strokeWidth={1.5}
-                    label={{ value:'60%', position:'insideTopRight', fontSize:10, fill:'#64748b', fontWeight:700 }} />
-                  <Tooltip content={<DarkTooltip />} cursor={{ fill:'#f8fafc' }} />
-                  <Bar dataKey="Score" radius={[6,6,0,0]}>
-                    {trendData.map((d, i) => <Cell key={i} fill={`url(#bar${i})`} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
+          <div className="col-span-12 lg:col-span-8">
+            <Card title="Daily Avg Score" sub="Last 14 days with data · dashed line = 60% target" className="h-full">
+              {trendData.length === 0 ? <p className="text-sm text-slate-400">No score data in this range.</p> : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={trendData} barSize={28} margin={{ top: 20, right: 8, bottom: 0, left: 0 }}>
+                    <defs>
+                      {trendData.map((d, i) => (
+                        <linearGradient key={i} id={`bar${i}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={scoreColor(d.Score)} stopOpacity={1} />
+                          <stop offset="100%" stopColor={scoreColor(d.Score)} stopOpacity={0.7} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0,100]} tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} width={36} />
+                    <ReferenceLine y={60} stroke="#64748b" strokeDasharray="5 3" strokeWidth={1.5}
+                      label={{ value:'60%', position:'insideTopRight', fontSize:10, fill:'#64748b', fontWeight:700 }} />
+                    <Tooltip content={<DarkTooltip />} cursor={{ fill:'#f8fafc' }} />
+                    <Bar dataKey="Score" radius={[6,6,0,0]}>
+                      {trendData.map((d, i) => <Cell key={i} fill={`url(#bar${i})`} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
+          </div>
         </div>
 
-        {/* Avg Score by Parameter — full width, tall, color-coded */}
+        {/* Avg Score by Parameter */}
         <Card
           title="Avg Score by Parameter"
           sub="Sorted worst → best · bars coloured by zone: red ≤50% · yellow 51–70% · green 71–100%"
         >
           {paramData.length === 0 ? <p className="text-sm text-slate-400">No data.</p> : (
             <>
-              {/* Zone legend */}
               <div className="flex items-center gap-6 mb-5">
-                {[['#ef4444','Critical ≤50%'],['#f59e0b','Average 51–70%'],['#10b981','Good 71–100%']].map(([c,l])=>(
-                  <div key={l} className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                    <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: c }} />
-                    {l}
+                {[
+                  { color: '#ef4444', label: 'Critical ≤50%' },
+                  { color: '#f59e0b', label: 'Average 51–70%' },
+                  { color: '#10b981', label: 'Good 71–100%' }
+                ].map(({ color, label }) => (
+                  <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                    <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: color }} />
+                    {label}
                   </div>
                 ))}
               </div>
@@ -375,57 +436,62 @@ export default function Dashboard() {
         </Card>
 
         {/* Radar + Score Distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-12 gap-6">
           {/* Radar chart */}
-          <Card title="Parameter Radar" sub="Visual overview of all parameter averages">
-            {paramData.length < 3 ? <p className="text-sm text-slate-400">Need at least 3 parameters for radar view.</p> : (
-              <ResponsiveContainer width="100%" height={260}>
-                <RadarChart data={paramData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
-                  <PolarGrid stroke="#e2e8f0" />
-                  <PolarAngleAxis dataKey="param" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} />
-                  <PolarRadiusAxis angle={30} domain={[0,100]} tick={{ fontSize: 9, fill: '#94a3b8' }}
-                    tickFormatter={v=>`${v}%`} tickCount={4} />
-                  <Radar name="Avg Score" dataKey="Score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.15} strokeWidth={2.5} dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }} />
-                  <Tooltip content={<DarkTooltip />} />
-                </RadarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
+          <div className="col-span-12 lg:col-span-6">
+            <Card title="Parameter Radar" sub="Visual overview of all parameter averages" className="h-full">
+              {paramData.length < 3 ? <p className="text-sm text-slate-400">Need at least 3 parameters for radar view.</p> : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <RadarChart data={paramData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
+                    <PolarGrid stroke="#e2e8f0" />
+                    <PolarAngleAxis dataKey="param" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} />
+                    <PolarRadiusAxis angle={30} domain={[0,100]} tick={{ fontSize: 9, fill: '#94a3b8' }}
+                      tickFormatter={v=>`${v}%`} tickCount={4} />
+                    <Radar name="Avg Score" dataKey="Score" stroke="#ff7b54" fill="#ff7b54" fillOpacity={0.15} strokeWidth={2.5} dot={{ r: 3, fill: '#ff7b54', strokeWidth: 0 }} />
+                    <Tooltip content={<DarkTooltip />} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
+          </div>
 
           {/* Score distribution histogram */}
-          <Card
-            title="Score Distribution"
-            sub="How many calls hit each score value"
-            action={
-              allParams.length > 0 && (
-                <select value={histParam || ''} onChange={e => setHistParam(e.target.value)}
-                  className="text-sm font-semibold border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/30 min-w-[200px] max-w-[260px] shadow-sm">
-                  {allParams.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              )
-            }
-          >
-            {!histParam || histData.every(d => d.Calls === 0) ? (
-              <p className="text-sm text-slate-400">No score data for this parameter.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={histData} barSize={28} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="score" tick={{ fontSize:12, fill:'#475569', fontWeight:700 }} axisLine={false} tickLine={false}
-                    label={{ value:'Score value', position:'insideBottom', offset:-2, fontSize:10, fill:'#94a3b8', fontWeight:600 }} />
-                  <YAxis tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip content={<DarkTooltip />} cursor={{ fill:'#f8fafc' }} />
-                  <Bar dataKey="Calls" radius={[6,6,0,0]}>
-                    {histData.map((d, i) => {
-                      const maxScore = histData.reduce((a,b) => a.score > b.score ? a : b, { score: 1 }).score
-                      const pct = Math.round(d.score / maxScore * 100)
-                      return <Cell key={i} fill={scoreColor(pct)} fillOpacity={d.Calls === 0 ? 0.15 : 0.85} />
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
+          <div className="col-span-12 lg:col-span-6">
+            <Card
+              title="Score Distribution"
+              sub="How many calls hit each score value"
+              className="h-full"
+              action={
+                allParams.length > 0 && (
+                  <select value={histParam || ''} onChange={e => setHistParam(e.target.value)}
+                    className="text-sm font-semibold border border-gray-200 rounded-xl px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#ff7b54]/30 min-w-[200px] max-w-[260px] shadow-sm">
+                    {allParams.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                )
+              }
+            >
+              {!histParam || histData.every(d => d.Calls === 0) ? (
+                <p className="text-sm text-slate-400">No score data for this parameter.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={histData} barSize={28} margin={{ top: 20, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="score" tick={{ fontSize:12, fill:'#475569', fontWeight:700 }} axisLine={false} tickLine={false}
+                      label={{ value:'Score value', position:'insideBottom', offset:-2, fontSize:10, fill:'#94a3b8', fontWeight:600 }} />
+                    <YAxis tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<DarkTooltip />} cursor={{ fill:'#f8fafc' }} />
+                    <Bar dataKey="Calls" radius={[6,6,0,0]}>
+                      {histData.map((d, i) => {
+                        const maxScore = histData.reduce((a,b) => a.score > b.score ? a : b, { score: 1 }).score
+                        const pct = Math.round(d.score / maxScore * 100)
+                        return <Cell key={i} fill={scoreColor(pct)} fillOpacity={d.Calls === 0 ? 0.15 : 0.85} />
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
+          </div>
         </div>
 
         {/* Call Duration sparkline */}
@@ -435,129 +501,132 @@ export default function Dashboard() {
               <AreaChart data={durationData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="durGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#8b5cf6" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                    <stop offset="5%"  stopColor="#ff7b54" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#ff7b54" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="call" tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize:10, fill:'#94a3b8', fontWeight:600 }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}m`} width={30} />
                 {avgDuration !== null && (
-                  <ReferenceLine y={avgDuration} stroke="#8b5cf6" strokeDasharray="5 3" strokeWidth={1.5}
-                    label={{ value:`avg ${avgDuration}m`, position:'insideTopRight', fontSize:10, fill:'#8b5cf6', fontWeight:700 }} />
+                  <ReferenceLine y={avgDuration} stroke="#ff7b54" strokeDasharray="5 3" strokeWidth={1.5}
+                    label={{ value:`avg ${avgDuration}m`, position:'insideTopRight', fontSize:10, fill:'#ff7b54', fontWeight:700 }} />
                 )}
                 <Tooltip content={<DarkTooltip />} />
-                <Area type="monotone" dataKey="min" name="Duration (min)" stroke="#8b5cf6" fill="url(#durGrad)" strokeWidth={2.5} dot={false} activeDot={{ r:4, fill:'#8b5cf6' }} />
+                <Area type="monotone" dataKey="min" name="Duration (min)" stroke="#ff7b54" fill="url(#durGrad)" strokeWidth={2.5} dot={false} activeDot={{ r:4, fill:'#ff7b54' }} />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
         )}
 
-        {/* Flagged calls */}
-        <div id="flagged">
-          <Card
-            title="Flagged for Review"
-            action={
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-slate-400">Threshold:</span>
-                <input type="range" min={20} max={80} step={5} value={threshold}
-                  onChange={e => setThreshold(Number(e.target.value))}
-                  className="w-24 accent-rose-500" />
-                <span className="text-xs font-bold text-rose-500 w-8 tabular">{threshold}%</span>
-                <SlidersHorizontal size={13} className="text-slate-400" />
-              </div>
-            }
-          >
-            {flagged.length === 0 ? (
-              <div className="flex items-center gap-3 py-8 justify-center text-slate-400">
-                <Trophy size={24} className="text-amber-400" />
-                <p className="text-sm font-medium">No calls below {threshold}% in this range.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {['File','Agent','Status','Score','Demo Booked','Date'].map(h=><th key={h} className="pb-3 pr-4 border-b border-slate-100/80 whitespace-nowrap">{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {flagged.map(c => {
-                    const pcts      = scoreMap[c.id]
-                    const sc        = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : 0
-                    const agentName = c.metadata?.agent_name || null
-                    const demoScore = paramScoreMap[c.id]?.['Was Demo Scheduled ?'] ?? paramScoreMap[c.id]?.['Was Demo Scheduled?'] ?? null
-                    const demoLabel = demoScore === null ? '—'
-                      : demoScore >= 3 ? <span className="text-emerald-600 font-bold">✓ Confirmed</span>
-                      : demoScore >= 2 ? <span className="text-amber-600 font-bold">⟳ Callback</span>
-                      : demoScore >= 1 ? <span className="text-rose-500 font-bold">✕ Declined</span>
-                      : <span className="text-slate-400">Not attempted</span>
-                    return (
-                      <tr key={c.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100/50 last:border-0">
-                        <td className="py-3.5 pr-4 font-semibold text-slate-700 max-w-[180px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
-                        <td className="py-3.5 pr-4">
-                          {agentName
-                            ? <span className="flex items-center gap-1.5 text-xs font-bold text-violet-700 whitespace-nowrap">
-                                <span className="w-5 h-5 rounded-md bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
-                                  {agentName.slice(0,2).toUpperCase()}
-                                </span>
-                                {agentName}
-                              </span>
-                            : <span className="text-slate-300 text-xs">—</span>}
-                        </td>
-                        <td className="py-3.5 pr-4"><StatusBadge status={c.status} /></td>
-                        <td className="py-3.5 pr-4">
-                          <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border ${scoreBgClass(sc)}`}>
-                            <TrendingDown size={11} /> {sc}%
-                          </span>
-                        </td>
-                        <td className="py-3.5 pr-4 text-xs">{demoLabel}</td>
-                        <td className="py-3.5 text-slate-400 text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}</td>
+        {/* Tables Section */}
+        <div className="grid grid-cols-12 gap-6">
+          {/* Flagged calls */}
+          <div id="flagged" className="col-span-12 lg:col-span-6">
+            <Card
+              title="Flagged for Review"
+              className="h-full"
+              action={
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-gray-400">Threshold:</span>
+                  <input type="range" min={20} max={80} step={5} value={threshold}
+                    onChange={e => setThreshold(Number(e.target.value))}
+                    className="w-24 accent-[#ff7b54]" />
+                  <span className="text-xs font-bold text-[#ff7b54] w-8 tabular">{threshold}%</span>
+                </div>
+              }
+            >
+              {flagged.length === 0 ? (
+                <div className="flex items-center gap-3 py-8 justify-center text-gray-400">
+                  <Trophy size={24} className="text-amber-400" />
+                  <p className="text-sm font-medium">No calls below {threshold}% in this range.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        {['File','Agent','Status','Score','Date'].map(h=><th key={h} className="pb-3 pr-4 border-b border-gray-100 whitespace-nowrap">{h}</th>)}
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* Recent calls */}
-        <Card>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-sm font-bold text-slate-800">Recent Calls</h2>
-            <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-bold">{total} total</span>
+                    </thead>
+                    <tbody>
+                      {flagged.map(c => {
+                        const pcts      = scoreMap[c.id]
+                        const sc        = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : 0
+                        const agentName = c.metadata?.agent_name || null
+                        return (
+                          <tr key={c.id} className="hover:bg-gray-50/50 transition-colors border-b border-gray-50 last:border-0">
+                            <td className="py-3.5 pr-4 font-semibold text-gray-700 max-w-[120px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
+                            <td className="py-3.5 pr-4">
+                              {agentName
+                                ? <span className="flex items-center gap-1.5 text-xs font-bold text-gray-700 whitespace-nowrap">
+                                    <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 text-[9px] font-bold shrink-0">
+                                      {agentName.slice(0,2).toUpperCase()}
+                                    </span>
+                                    {agentName}
+                                  </span>
+                                : <span className="text-gray-300 text-xs">—</span>}
+                            </td>
+                            <td className="py-3.5 pr-4"><StatusBadge status={c.status} /></td>
+                            <td className="py-3.5 pr-4">
+                              <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border ${scoreBgClass(sc)}`}>
+                                {sc <= 50 ? <TrendingDown size={11} /> : sc <= 70 ? <ArrowRight size={11} /> : <TrendingUp size={11} />} {sc}%
+                              </span>
+                            </td>
+                            <td className="py-3.5 text-gray-400 text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'})}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                {['File','Status','Score','Duration','Date'].map(h=><th key={h} className="pb-3 border-b border-slate-100/80">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCalls.slice(0,10).map(c => {
-                const pcts = scoreMap[c.id]
-                const sc   = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : null
-                const dur  = c.duration_seconds ? `${(c.duration_seconds/60).toFixed(1)}m` : '—'
-                return (
-                  <tr key={c.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-100/50 last:border-0">
-                    <td className="py-3.5 pr-4 font-semibold text-slate-700 max-w-[200px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
-                    <td className="py-3.5 pr-4"><StatusBadge status={c.status} /></td>
-                    <td className="py-3.5 pr-4">
-                      {sc !== null ? (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${scoreBgClass(sc)}`}>{sc}%</span>
-                      ) : <span className="text-slate-300">—</span>}
-                    </td>
-                    <td className="py-3.5 pr-4 text-slate-400 text-xs tabular">{dur}</td>
-                    <td className="py-3.5 text-slate-400 text-xs">{new Date(c.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'})}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </Card>
+
+          {/* Recent calls */}
+          <div className="col-span-12 lg:col-span-6">
+            <Card className="h-full">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Recent Calls</h2>
+                  <p className="text-xs text-gray-400 font-medium mt-0.5">Latest processed calls</p>
+                </div>
+                <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full font-bold">{total} total</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      {['File','Status','Score','Duration','Date'].map(h=><th key={h} className="pb-3 border-b border-gray-100">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCalls.slice(0,10).map(c => {
+                      const pcts = scoreMap[c.id]
+                      const sc   = pcts ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length*100) : null
+                      const dur  = c.duration_seconds ? `${(c.duration_seconds/60).toFixed(1)}m` : '—'
+                      return (
+                        <tr key={c.id} className="hover:bg-gray-50/50 transition-colors border-b border-gray-50 last:border-0">
+                          <td className="py-3.5 pr-4 font-semibold text-gray-700 max-w-[150px] truncate">{c.metadata?.filename || `call-${c.id.slice(0,8)}`}</td>
+                          <td className="py-3.5 pr-4"><StatusBadge status={c.status} /></td>
+                          <td className="py-3.5 pr-4">
+                            {sc !== null ? (
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${scoreBgClass(sc)}`}>{sc}%</span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-3.5 pr-4 text-gray-400 text-xs tabular">{dur}</td>
+                          <td className="py-3.5 text-gray-400 text-xs">{new Date(c.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'})}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+        </div>
       </div>
     </div>
+  </div>
   )
 }

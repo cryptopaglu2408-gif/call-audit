@@ -75,7 +75,7 @@ export default function Agents() {
         supabase.from('calls')
           .select('id, status, created_at, duration_seconds, metadata, drive_link')
           .order('created_at', { ascending: false }),
-        supabase.from('scores').select('call_id, parameter, score, max_score'),
+        supabase.from('scores').select('call_id, parameter, score, max_score').limit(10000),
       ])
       setCalls(c || [])
       setAllScores(s || [])
