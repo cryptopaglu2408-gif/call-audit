@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Plus, Trash2, CheckCircle2, Zap, GitCompare } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, Zap, GitCompare, GripVertical } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell } from 'recharts'
 import { supabase, fetchAllScores } from '../lib/supabase'
 import Spinner from '../components/Spinner'
@@ -45,6 +45,8 @@ export default function Rubric() {
   const [params, setParams]       = useState([{ ...EMPTY }])
   const [compareIds, setCompareIds] = useState([])
   const [tab, setTab]             = useState('editor') // 'editor' | 'compare'
+  const [dragIndex, setDragIndex] = useState(null)
+  const [dragOver, setDragOver]   = useState(null)
 
   useEffect(() => { load() }, [])
 
@@ -64,6 +66,16 @@ export default function Rubric() {
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
+  }
+
+  function moveParam(from, to) {
+    if (from === to || from === null || to === null) return
+    setParams(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
   }
 
   function updateParam(i, k, v) {
@@ -176,14 +188,31 @@ export default function Rubric() {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-[1fr_110px_2fr_70px_36px] gap-3 px-1">
-                    {['Name','Type','Scoring Criteria (sent to AI)','Max',''].map(h => <span key={h} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h}</span>)}
+                  <div className="grid grid-cols-[20px_1fr_110px_2fr_70px_36px] gap-3 px-1">
+                    {['', 'Name', 'Type', 'Scoring Criteria (sent to AI)', 'Max', ''].map((h, idx) => (
+                      <span key={idx} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h}</span>
+                    ))}
                   </div>
                   {params.map((p, i) => {
                     const typeObj = TYPES.find(t => t.value === (p.type || 'numeric'))
                     const maxLocked = typeObj?.autoMax != null
+                    const isOver = dragOver === i && dragIndex !== i
                     return (
-                    <div key={i} className="grid grid-cols-[1fr_110px_2fr_70px_36px] gap-3 items-center">
+                    <div
+                      key={i}
+                      draggable
+                      onDragStart={() => setDragIndex(i)}
+                      onDragOver={e => { e.preventDefault(); if (dragOver !== i) setDragOver(i) }}
+                      onDrop={e => { e.preventDefault(); moveParam(dragIndex, i); setDragIndex(null); setDragOver(null) }}
+                      onDragEnd={() => { setDragIndex(null); setDragOver(null) }}
+                      className={`grid grid-cols-[20px_1fr_110px_2fr_70px_36px] gap-3 items-center rounded-xl transition-all duration-150
+                        ${dragIndex === i ? 'opacity-40' : ''}
+                        ${isOver ? 'border-t-2 border-emerald-400' : ''}
+                      `}
+                    >
+                      <div className="cursor-grab active:cursor-grabbing flex items-center justify-center text-slate-300 hover:text-slate-500 transition-colors">
+                        <GripVertical size={15} />
+                      </div>
                       <input value={p.name} onChange={e => updateParam(i,'name',e.target.value)} placeholder="Call Opening"
                         className="px-3.5 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all font-bold text-slate-700" />
                       <select value={p.type || 'numeric'} onChange={e => updateParam(i,'type',e.target.value)}
