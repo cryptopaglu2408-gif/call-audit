@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut, MessageSquare, Phone, Check } from 'lucide-react'
+import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const links = [
@@ -17,19 +17,15 @@ export default function Sidebar() {
   const username = user?.email?.split('@')[0] ?? ''
 
   return (
-    <aside className="w-[72px] hover:w-[240px] bg-gradient-to-b from-[#0d1117] to-[#05070a] flex flex-col shrink-0 border-r border-white/5 transition-all duration-300 ease-in-out group z-20">
+    <aside className="w-[80px] hover:w-[240px] bg-gradient-to-b from-[#0d1117] to-[#05070a] flex flex-col shrink-0 border-r border-white/5 transition-[width] duration-300 ease-in-out group z-20 [will-change:width]">
       {/* Brand */}
       <div className="px-4 pt-7 pb-6 overflow-hidden">
         <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-900/30 transform hover:rotate-12 transition-transform duration-300">
-            <Phone size={20} className="text-white" />
-            <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-[#0d1117]">
-              <Check size={10} className="text-white" strokeWidth={3} />
-            </div>
+          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shrink-0 transform hover:rotate-12 transition-transform duration-300">
+            <img src="/logo.png" alt="Call Audit Logo" className="w-full h-full object-contain" />
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap flex flex-col justify-center">
             <p className="text-white font-bold text-sm tracking-tight">Call Audit</p>
-            <p className="text-white/30 text-[10px] mt-0.5 font-medium">SuperSheldon</p>
           </div>
         </div>
       </div>
