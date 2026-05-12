@@ -3,7 +3,7 @@ import {
   ExternalLink, RefreshCw, Clock, Zap, CheckCircle2, XCircle,
   Send, Copy, Upload, FileAudio, AlertCircle, Trash2, Play, RotateCcw,
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllScores } from '../lib/supabase'
 import { transcribeAudio, scoreTranscript, getFileDuration } from '../lib/gemini'
 import Spinner from '../components/Spinner'
 
@@ -87,13 +87,13 @@ function AutoPipelineTab() {
 
   async function load() {
     setLoading(true)
-    const [{ data: c }, { data: s }, { data: cfg }] = await Promise.all([
+    const [{ data: c }, s, { data: cfg }] = await Promise.all([
       supabase.from('calls').select('id, status, created_at, duration_seconds, metadata, drive_link').filter('metadata->>source', 'eq', 'auto-pipeline').order('created_at', { ascending: false }).limit(200),
-      supabase.from('scores').select('call_id, parameter, score, max_score').limit(10000),
+      fetchAllScores(),
       supabase.from('settings').select('value').eq('key', 'pipeline').limit(1),
     ])
     setCalls(c || [])
-    setAllScores(s || [])
+    setAllScores(s)
     if (cfg?.[0]) setPaused(cfg[0].value?.paused ?? false)
     setTs(new Date())
     setLoading(false)

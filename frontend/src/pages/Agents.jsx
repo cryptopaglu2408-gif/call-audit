@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Phone, Award, TrendingUp, TrendingDown, ChevronRight, ExternalLink, Search } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllScores } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 
 const TIME_FILTERS = [
@@ -71,14 +71,14 @@ export default function Agents() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [{ data: c }, { data: s }] = await Promise.all([
+      const [{ data: c }, s] = await Promise.all([
         supabase.from('calls')
           .select('id, status, created_at, duration_seconds, metadata, drive_link')
           .order('created_at', { ascending: false }),
-        supabase.from('scores').select('call_id, parameter, score, max_score').limit(10000),
+        fetchAllScores(),
       ])
       setCalls(c || [])
-      setAllScores(s || [])
+      setAllScores(s)
       setLoading(false)
     }
     load()

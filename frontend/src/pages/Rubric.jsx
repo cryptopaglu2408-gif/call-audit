@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Plus, Trash2, CheckCircle2, Zap, GitCompare } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell } from 'recharts'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllScores } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 
 const EMPTY = { name: '', description: '', max_score: 10, type: 'numeric' }
@@ -49,12 +49,12 @@ export default function Rubric() {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const [{ data: r }, { data: s }] = await Promise.all([
+    const [{ data: r }, s] = await Promise.all([
       supabase.from('rubrics').select('*').order('created_at', { ascending: false }),
-      supabase.from('scores').select('rubric_id, parameter, score, max_score').limit(10000),
+      fetchAllScores('rubric_id, parameter, score, max_score'),
     ])
     setRubrics(r || [])
-    setAllScores(s || [])
+    setAllScores(s)
     const active = (r || []).find(x => x.is_active)
     if (active) { setName(active.name); setParams(active.parameters.map(p => ({ ...p, type: inferType(p) }))) }
     if ((r || []).length >= 2) setCompareIds([(r[0]).id, (r[1]).id])

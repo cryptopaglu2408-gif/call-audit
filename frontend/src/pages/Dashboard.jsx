@@ -7,7 +7,7 @@ import {
   Legend,
 } from 'recharts'
 import { AlertTriangle, SlidersHorizontal, TrendingDown, TrendingUp, ArrowRight, Phone, Check, Star, Trophy } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllScores } from '../lib/supabase'
 import KPICard from '../components/KPICard'
 import Spinner from '../components/Spinner'
 
@@ -118,10 +118,10 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       supabase.from('calls').select('id, status, created_at, duration_seconds, metadata').order('created_at', { ascending: false }),
-      supabase.from('scores').select('call_id, parameter, score, max_score').limit(10000),
-    ]).then(([{ data: c }, { data: s }]) => {
+      fetchAllScores(),
+    ]).then(([{ data: c }, s]) => {
       setCalls(c || [])
-      setScores(s || [])
+      setScores(s)
       if (s?.length) setHistParam([...new Set(s.map(x => x.parameter))][0] || null)
       setLoading(false)
     })
