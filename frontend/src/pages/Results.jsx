@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ExternalLink, Search, X, Phone, Pencil, Check, RotateCcw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
+import PlayCallButton from '../components/PlayCallButton'
 
 function StatusBadge({ status }) {
   const map = { 
@@ -379,6 +380,7 @@ export default function Results() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <PlayCallButton call={selected} />
                   {selected.drive_link && (
                     <a href={selected.drive_link} target="_blank" rel="noreferrer"
                       className="flex items-center gap-1.5 text-xs font-bold text-white bg-black hover:bg-gray-800 px-4 py-2 rounded-full transition-colors">

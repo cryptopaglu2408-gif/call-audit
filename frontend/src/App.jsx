@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AudioPlayerProvider } from './contexts/AudioPlayerContext'
 import Sidebar from './components/Sidebar'
+import AudioPlayerBar from './components/AudioPlayerBar'
 import Dashboard from './pages/Dashboard'
 import Results from './pages/Results'
 import Rubric from './pages/Rubric'
@@ -25,7 +27,7 @@ function AppLayout() {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pb-20">
         <Routes>
           <Route path="/"         element={<Dashboard />} />
           <Route path="/results"  element={<Results />} />
@@ -35,6 +37,7 @@ function AppLayout() {
           <Route path="/slack"    element={<Slack />} />
         </Routes>
       </main>
+      <AudioPlayerBar />
     </div>
   )
 }
@@ -42,14 +45,16 @@ function AppLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/*" element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        } />
-      </Routes>
+      <AudioPlayerProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/*" element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </AudioPlayerProvider>
     </AuthProvider>
   )
 }

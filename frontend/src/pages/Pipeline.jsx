@@ -6,6 +6,7 @@ import {
 import { supabase, fetchAllScores } from '../lib/supabase'
 import { transcribeAudio, scoreTranscript, getFileDuration, getMimeType } from '../lib/gemini'
 import Spinner from '../components/Spinner'
+import PlayCallButton from '../components/PlayCallButton'
 
 const DRIVE_URL    = 'https://drive.google.com/drive/folders/1qAA2I00k827z55_4P2LUNyijgG-1-PxZ'
 const RAILWAY_URL  = 'https://railway.app/dashboard'
@@ -489,24 +490,24 @@ async function sendCallToSlack(file, enrichedScores, rubricParams, agentName, du
 
 // ─── Drive upload helper ──────────────────────────────────────────────────────
 async function uploadToDrive(file, callId) {
-  const mimeType = getMimeType(file)
+  const mimeType    = getMimeType(file)
+  const storagePath = `${callId}/${file.name}`
+
+  // 1. Upload to Supabase Storage (handles any file size)
+  const { error: upErr } = await supabase.storage
+    .from('call-audio')
+    .upload(storagePath, file, { contentType: mimeType, upsert: true })
+  if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`)
+
+  // 2. Edge function pulls from Storage → pushes to Drive → cleans up Storage
   const { data, error } = await supabase.functions.invoke('drive-upload-url', {
-    body: { filename: file.name, mimeType },
+    body: { storagePath, filename: file.name, mimeType },
   })
-  if (error || !data?.uploadUrl) throw new Error(error?.message || 'No upload URL')
+  if (error || !data?.id) throw new Error(error?.message || data?.error || 'Drive upload failed')
 
-  const uploadRes = await fetch(data.uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': mimeType, 'Content-Length': String(file.size) },
-    body: file,
-  })
-  if (!uploadRes.ok && uploadRes.status !== 308) throw new Error(`Drive PUT failed: ${uploadRes.status}`)
-
-  const driveData = await uploadRes.json().catch(() => null)
-  if (driveData?.id) {
-    const driveLink = `https://drive.google.com/file/d/${driveData.id}/view`
-    await supabase.from('calls').update({ drive_link: driveLink }).eq('id', callId)
-  }
+  const driveLink = `https://drive.google.com/file/d/${data.id}/view`
+  await supabase.from('calls').update({ drive_link: driveLink }).eq('id', callId)
+  return driveLink
 }
 
 // ─── Manual Upload Tab ───────────────────────────────────────────────────────
@@ -669,7 +670,13 @@ function ManualUploadTab() {
         setExpanded(prev => new Set(prev).add(item.id))
 
         // Upload to Drive manual folder (best-effort, non-blocking)
-        uploadToDrive(item.file, callId).catch(e => console.warn('Drive upload failed:', e))
+        updateFile(item.id, { driveStatus: 'uploading' })
+        uploadToDrive(item.file, callId)
+          .then(driveLink => updateFile(item.id, { driveStatus: 'done', driveLink }))
+          .catch(e => {
+            console.error('[Drive upload] failed:', e)
+            updateFile(item.id, { driveStatus: 'error', driveError: e.message })
+          })
 
         sendCallToSlack(item.file, enrichedScores, rubric.parameters, agentName, durationSeconds, overallPct)
           .catch(e => console.warn('Slack notification failed:', e))
@@ -783,13 +790,19 @@ function ManualUploadTab() {
                       <p className="text-sm font-semibold text-slate-700 truncate">{item.file.name}</p>
                       {item.error
                         ? <p className="text-[11px] text-rose-500 mt-0.5 truncate">{item.error}</p>
-                        : <p className="text-[11px] text-slate-400 mt-0.5">{(item.file.size / 1024 / 1024).toFixed(1)} MB</p>
+                        : <p className="text-[11px] text-slate-400 mt-0.5">
+                            {(item.file.size / 1024 / 1024).toFixed(1)} MB
+                            {item.driveStatus === 'uploading' && <span className="ml-2 text-violet-400 animate-pulse">· Saving to Drive…</span>}
+                            {item.driveStatus === 'done'     && <span className="ml-2 text-emerald-500">· Saved to Drive</span>}
+                            {item.driveStatus === 'error'    && <span className="ml-2 text-rose-400" title={item.driveError}>· Drive failed: {item.driveError}</span>}
+                          </p>
                       }
                     </div>
 
                     {/* Done: verdict + score + expand toggle */}
                     {item.status === 'done' && item.overallPct !== null ? (
                       <>
+                        {item.driveLink && <PlayCallButton call={{ id: item.callId, drive_link: item.driveLink, metadata: { filename: item.file.name } }} />}
                         <span className={`px-2.5 py-1 rounded-lg text-xs font-bold animate-pop-in ${isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
                           {isApproved ? '✓ Approved' : '✕ Rejected'}
                         </span>

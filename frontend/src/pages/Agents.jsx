@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, Fragment } from 'react'
 import { Phone, Award, TrendingUp, TrendingDown, ChevronRight, ExternalLink, Search } from 'lucide-react'
 import { supabase, fetchAllScores } from '../lib/supabase'
 import Spinner from '../components/Spinner'
+import PlayCallButton from '../components/PlayCallButton'
 
 const TIME_FILTERS = [
   { id: 'last5',      label: 'Last 5 calls'  },
@@ -401,14 +402,17 @@ export default function Agents() {
                                 {c.duration_seconds ? `${(c.duration_seconds / 60).toFixed(1)}m` : '—'}
                               </td>
                               <td className="py-2">
-                                {c.drive_link ? (
-                                  <a href={c.drive_link} target="_blank" rel="noreferrer"
-                                    className="text-[#ff7b54] hover:text-[#e66a46] transition-colors">
-                                    <ExternalLink size={12} />
-                                  </a>
-                                ) : (
-                                  <span className="text-gray-200">—</span>
-                                )}
+                                <div className="flex items-center gap-1.5">
+                                  <PlayCallButton call={c} />
+                                  {c.drive_link ? (
+                                    <a href={c.drive_link} target="_blank" rel="noreferrer"
+                                      className="text-[#ff7b54] hover:text-[#e66a46] transition-colors">
+                                      <ExternalLink size={12} />
+                                    </a>
+                                  ) : (
+                                    <span className="text-gray-200">—</span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           )
