@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut, MessageSquare } from 'lucide-react'
+import { LayoutDashboard, BarChart3, SlidersHorizontal, Workflow, Users, LogOut, MessageSquare, Phone, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const links = [
@@ -21,8 +21,11 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="px-4 pt-7 pb-6 overflow-hidden">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-900/30 transform hover:rotate-12 transition-transform duration-300">
-            <span className="text-white text-xs font-bold">CA</span>
+          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-900/30 transform hover:rotate-12 transition-transform duration-300">
+            <Phone size={20} className="text-white" />
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-[#0d1117]">
+              <Check size={10} className="text-white" strokeWidth={3} />
+            </div>
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap flex flex-col justify-center">
             <p className="text-white font-bold text-sm tracking-tight">Call Audit</p>
