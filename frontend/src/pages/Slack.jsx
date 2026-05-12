@@ -154,15 +154,15 @@ export default function Slack() {
   async function sendSelected() {
     const webhook = WEBHOOK
     if (!webhook) {
-      setSendResult({ ok: false, msg: 'No webhook URL. Set VITE_SLACK_WEBHOOK or paste one in the config panel.' })
-      setTimeout(() => setSendResult(null), 5000)
+      setSendResult({ ok: false, msg: 'No webhook URL configured. Set VITE_SLACK_WEBHOOK in .env.local (local) or Netlify environment variables (production).' })
       return
     }
     const toSend = filtered.filter(c => selected.has(c.id))
     if (!toSend.length) return
     setSending(true)
     const now = new Date().toISOString()
-    let ok = 0, fail = 0
+    let ok = 0
+    const errors = []
     for (const call of toSend) {
       const scores = scoreMap[call.id] || []
       const msg = buildMessage(call, scores, rubric, config)
@@ -177,13 +177,26 @@ export default function Slack() {
           const newMeta = { ...call.metadata, slack_sent_at: now }
           await supabase.from('calls').update({ metadata: newMeta }).eq('id', call.id)
           setCalls(prev => prev.map(c => c.id === call.id ? { ...c, metadata: newMeta } : c))
-        } else { fail++ }
-      } catch { fail++ }
+        } else {
+          const body = await res.text().catch(() => '')
+          const detail = `HTTP ${res.status}${body ? ': ' + body : ''}`
+          errors.push(detail)
+          console.error('[Slack send] failed for call', call.id, detail)
+        }
+      } catch (e) {
+        const detail = e?.message || String(e)
+        errors.push(detail)
+        console.error('[Slack send] fetch threw for call', call.id, e)
+      }
     }
     setSending(false)
     setSelected(new Set())
-    setSendResult({ ok: fail === 0, msg: fail === 0 ? `✓ Sent ${ok} message${ok !== 1 ? 's' : ''} to Slack` : `Sent ${ok}, failed ${fail}` })
-    setTimeout(() => setSendResult(null), 5000)
+    if (errors.length === 0) {
+      setSendResult({ ok: true, msg: `✓ Sent ${ok} message${ok !== 1 ? 's' : ''} to Slack` })
+      setTimeout(() => setSendResult(null), 5000)
+    } else {
+      setSendResult({ ok: false, msg: `Sent ${ok}, failed ${errors.length} — ${[...new Set(errors)].join(' · ')}` })
+    }
   }
 
   const previewCall = preview
@@ -216,10 +229,11 @@ export default function Slack() {
     <div className="min-h-full bg-slate-50/50">
       {/* Toast */}
       {sendResult && (
-        <div className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold shadow-xl transition-all
-          ${sendResult.ok ? 'bg-slate-900 text-white' : 'bg-rose-500 text-white'}`}>
-          {sendResult.ok && <Check size={15} className="text-emerald-400" />}
-          {sendResult.msg}
+        <div className={`fixed top-5 right-5 z-50 flex items-start gap-3 px-4 py-3 rounded-xl text-sm font-bold shadow-xl max-w-sm
+          ${sendResult.ok ? 'bg-slate-900 text-white' : 'bg-rose-600 text-white'}`}>
+          {sendResult.ok && <Check size={15} className="text-emerald-400 shrink-0 mt-0.5" />}
+          <span className="flex-1 leading-snug">{sendResult.msg}</span>
+          <button onClick={() => setSendResult(null)} className="text-white/50 hover:text-white shrink-0 ml-1">✕</button>
         </div>
       )}
 
