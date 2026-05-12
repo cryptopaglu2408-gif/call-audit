@@ -163,180 +163,234 @@ function AutoPipelineTab() {
   const failed    = calls.filter(c => c.status === 'error').length
   const lastRun   = calls[0]?.created_at
 
+  const successRate = total ? Math.round(succeeded / total * 100) : 0
+
   return (
-    <div className="space-y-6">
-      {/* Status banner */}
-      <div className={`bg-gradient-to-r ${paused ? 'from-slate-500 to-slate-700' : 'from-emerald-500 to-teal-600'} rounded-2xl p-6 text-white flex items-center justify-between shadow-lg transition-all duration-500`}>
-        <div className="flex items-center gap-4">
-          <div className={`w-3 h-3 rounded-full bg-white ${paused ? '' : 'animate-pulse'}`} />
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+      <style>{`
+        .bg-card {
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          border-radius: 32px;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+          box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        }
+        .text-accent {
+          color: #ff7b54;
+        }
+        .bg-accent {
+          background-color: #ff7b54;
+        }
+      `}</style>
+
+      {/* Top Left: Pipeline Control (Visa Card style) */}
+      <div className="bg-card p-6 col-span-1 md:col-span-2 flex flex-col justify-between h-[200px]">
+        <div className="flex justify-between items-start">
           <div>
-            <p className="font-black text-base tracking-tight">{paused ? 'Pipeline Paused' : 'Pipeline Active'}</p>
-            <p className={`${paused ? 'text-slate-300' : 'text-emerald-50'} text-xs mt-0.5 font-medium`}>
-              {paused ? 'No new calls will be processed until resumed' : lastRun ? `Last processed: ${new Date(lastRun).toLocaleString('en-AU',{dateStyle:'medium',timeStyle:'short'})}` : 'No calls processed yet'}
-            </p>
+            <h3 className="font-bold text-gray-400 text-xs uppercase tracking-wider">Pipeline Status</h3>
+            <p className="text-sm font-medium text-gray-500 mt-1">Background worker active</p>
           </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${paused ? 'bg-gray-100 text-gray-500' : 'bg-orange-50 text-[#ff7b54]'}`}>
+            {paused ? 'Paused' : 'Running'}
+          </span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2">
-            <Clock size={14} className="text-white" />
-            <span className="text-sm font-bold">Every 30 min</span>
+        
+        <div className="flex items-center justify-between mt-auto">
+          <div>
+            <p className="text-3xl font-black text-gray-900">
+              {paused ? 'Hold' : 'Active'}
+            </p>
+            <p className="text-xs font-medium text-gray-400 mt-0.5">
+              {lastRun ? `Last run: ${new Date(lastRun).toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit'})}` : 'No runs yet'}
+            </p>
           </div>
           <button
             onClick={togglePause}
             disabled={pauseLoading}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200 disabled:opacity-50 ${
+            className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all ${
               paused
-                ? 'bg-emerald-400 hover:bg-emerald-300 text-emerald-900'
-                : 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                ? 'bg-black text-white hover:bg-gray-800'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {pauseLoading ? '…' : paused ? '▶ Resume' : '⏸ Pause'}
+            {pauseLoading ? '…' : paused ? 'Enable' : 'Pause'}
           </button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[
-          { label:'Auto-Processed', value:total,     sub:'via Bridge i2p',                                Icon:Zap,          color:'text-violet-600', bg:'bg-violet-50' },
-          { label:'Succeeded',      value:succeeded, sub:total?`${Math.round(succeeded/total*100)}% success rate`:'—', Icon:CheckCircle2, color:'text-emerald-600', bg:'bg-emerald-50' },
-          { label:'Failed',         value:failed,    sub:failed?'Check GCP logs':'No errors',             Icon:XCircle,      color:'text-rose-500',  bg:'bg-rose-50' },
-        ].map(({ label, value, sub, Icon, color, bg }) => (
-          <div key={label} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/60 p-6 hover:shadow-md transition-all duration-300">
-            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-4 shadow-sm`}><Icon size={18} className={color} /></div>
-            <p className="text-3xl font-black text-slate-900 tabular tracking-tight">{value}</p>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">{label}</p>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">{sub}</p>
+      {/* Top Right: Success Rate (36% Circle style) */}
+      <div className="bg-card p-6 col-span-1 flex flex-col items-center justify-center h-[200px]">
+        <div className="relative w-28 h-28">
+          {/* Black background circle */}
+          <div className="absolute inset-0 rounded-full bg-[#111] border-4 border-[#222]" />
+          {/* SVG for progress */}
+          <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+            <circle
+              className="text-[#ff7b54] stroke-current"
+              strokeWidth="6"
+              strokeLinecap="round"
+              fill="transparent"
+              r="40"
+              cx="50"
+              cy="50"
+              style={{
+                strokeDasharray: 251.2,
+                strokeDashoffset: 251.2 - (251.2 * successRate) / 100,
+              }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+            <span className="text-2xl font-black">{successRate}%</span>
+            <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Success</span>
           </div>
-        ))}
+        </div>
       </div>
 
-      {/* Quick links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          { href:DRIVE_URL,   emoji:'📁', label:'Drive Folder',   sub:'Bridge i2p uploads here automatically', hover:'hover:border-blue-200 hover:bg-blue-50/50',   icon:'text-blue-400 group-hover:text-blue-600' },
-          { href:RAILWAY_URL, emoji:'🚄', label:'Railway Dashboard', sub:'pipeline cron · every 30 min',    hover:'hover:border-violet-200 hover:bg-violet-50/50', icon:'text-violet-400 group-hover:text-violet-600' },
-        ].map(({ href, emoji, label, sub, hover, icon }) => (
-          <a key={label} href={href} target="_blank" rel="noreferrer"
-            className={`group bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/60 p-5 flex items-center gap-4 transition-all duration-300 ${hover}`}>
-            <span className="text-3xl">{emoji}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-800">{label}</p>
-              <p className="text-xs font-medium text-slate-500 truncate mt-0.5">{sub}</p>
-            </div>
-            <ExternalLink size={16} className={`shrink-0 ${icon} transition-colors`} />
-          </a>
-        ))}
+      {/* Middle Left: Auto-Processed (Total Income style) */}
+      <div className="bg-card p-6 flex flex-col justify-between h-[160px]">
+        <div className="flex justify-between items-start">
+          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+            <Zap size={14} className="text-gray-600" />
+          </div>
+          <span className="text-xs font-bold text-gray-400">Total</span>
+        </div>
+        <div>
+          <p className="text-sm font-bold text-gray-400">Calls Processed</p>
+          <p className="text-3xl font-black text-gray-900 mt-1">
+            {total}
+          </p>
+          <div className="flex gap-3 mt-2 text-xs font-bold">
+            <span className="text-emerald-600">{succeeded} Succeeded</span>
+            <span className="text-rose-500">{failed} Failed</span>
+          </div>
+        </div>
       </div>
 
-      {/* Weekly Digest */}
-      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/60 p-6">
-        <div className="flex items-center justify-between mb-6">
+      {/* Middle Center: Weekly Digest (Main Stocks style) */}
+      <div className="bg-card p-6 col-span-1 md:col-span-2 flex flex-col space-y-6 min-h-[200px]">
+        <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Weekly Digest</h2>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">Summary of this week's call performance</p>
+            <h3 className="font-bold text-gray-400 text-xs uppercase tracking-wider">Weekly Digest</h3>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">Average Score & Trend</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={copyDigest}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors">
-              <Copy size={14} /> {copied ? 'Copied!' : 'Copy'}
+          <div className="flex gap-2">
+            <button onClick={copyDigest} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+              <Copy size={14} />
             </button>
-            <button onClick={sendDigest} disabled={sending}
-              className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 px-4 py-2 rounded-xl shadow-sm transition-all">
-              <Send size={14} /> {sending ? 'Sending…' : 'Send to Slack'}
+            <button onClick={sendDigest} disabled={sending} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+              <Send size={14} />
             </button>
           </div>
         </div>
-        {sendResult && (
-          <div className={`mb-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${sendResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
-            {sendResult.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-            {sendResult.msg}
+        
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-4xl font-black text-gray-900">
+              {digest.processed.avg !== null ? `${digest.processed.avg}%` : '—'}
+            </p>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">
+              vs {digest.processed.prevAvg !== null ? `${digest.processed.prevAvg}%` : 'no data'} last week
+            </p>
           </div>
-        )}
-        {!SLACK_URL && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 font-medium">
-            <strong>Slack not connected.</strong> Add <code className="bg-amber-100 px-1 rounded mx-0.5">VITE_SLACK_WEBHOOK</code> to <code className="bg-amber-100 px-1 rounded mx-0.5">frontend/.env.local</code> and restart.
-          </div>
-        )}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[
-            { label:'This week', value: digest.thisWeek, sub:'calls processed' },
-            { label:'Avg score', value: digest.processed.avg !== null ? `${digest.processed.avg}%` : '—', sub: digest.processed.prevAvg !== null ? `was ${digest.processed.prevAvg}% last week` : 'last week: no data' },
-            { label:'Strongest', value: digest.bestParam?.score !== undefined ? `${digest.bestParam.score}%` : '—', sub: digest.bestParam?.name || '—' },
-            { label:'Weakest',   value: digest.worstParam?.score !== undefined ? `${digest.worstParam.score}%` : '—', sub: digest.worstParam?.name || '—' },
-          ].map(({ label, value, sub }) => (
-            <div key={label} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{label}</p>
-              <p className="text-2xl font-black text-slate-900 tabular mt-1">{value}</p>
-              <p className="text-[11px] font-medium text-slate-500 mt-0.5 truncate">{sub}</p>
+          {digest.processed.avg !== null && digest.processed.prevAvg !== null && (
+            <div className={`px-2.5 py-1 rounded-full text-xs font-bold ${digest.processed.avg >= digest.processed.prevAvg ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
+              {digest.processed.avg >= digest.processed.prevAvg ? '+' : ''}
+              {digest.processed.avg - digest.processed.prevAvg}%
             </div>
-          ))}
+          )}
         </div>
-        <div className="bg-slate-900 rounded-xl p-5 shadow-inner">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Preview</p>
-          <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">{digestText}</pre>
+
+        {/* Added back missing details */}
+        <div className="grid grid-cols-3 gap-2 mt-auto pt-4 border-t border-gray-100">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase">This Week</p>
+            <p className="text-sm font-black text-gray-900">{digest.thisWeek}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase">Strongest</p>
+            <p className="text-xs font-bold text-gray-700 truncate">{digest.bestParam?.name || '—'}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase">Weakest</p>
+            <p className="text-xs font-bold text-gray-700 truncate">{digest.worstParam?.name || '—'}</p>
+          </div>
         </div>
       </div>
 
-      {/* Pipeline stages */}
-      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/60 p-6">
-        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-6">Pipeline Flow</h2>
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-2">
+      {/* Pipeline Flow (Annual Profits style but horizontal) */}
+      <div className="bg-card p-6 col-span-1 md:col-span-3">
+        <h3 className="font-bold text-gray-400 text-xs uppercase tracking-wider mb-4">Pipeline Flow</h3>
+        <div className="flex items-center justify-between gap-4">
           {STAGES.map((s, i) => (
-            <div key={s.label} className="flex flex-col md:flex-row items-center gap-2 flex-1 min-w-0 w-full md:w-auto">
-              <div className="flex flex-col items-center text-center flex-1 min-w-0 bg-slate-50/50 rounded-xl p-4 border border-slate-100 w-full md:w-auto">
-                <div className="w-12 h-12 bg-white border border-slate-100 rounded-2xl flex items-center justify-center text-2xl mb-2 shadow-sm">{s.icon}</div>
-                <p className="text-xs font-bold text-slate-700">{s.label}</p>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5">{s.sub}</p>
+            <div key={s.label} className="flex-1 flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl mb-2 shadow-sm border border-white">
+                {s.icon}
               </div>
+              <p className="text-xs font-bold text-gray-700">{s.label}</p>
+              <p className="text-[10px] font-medium text-gray-400 mt-0.5">{s.sub}</p>
               {i < STAGES.length - 1 && (
-                <div className="text-slate-300 text-lg font-bold shrink-0 hidden md:block">→</div>
+                <div className="text-gray-300 text-sm font-bold mt-2 hidden md:block">→</div>
               )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Recent calls */}
-      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-200/60 p-6">
+      {/* Recent Calls (Activity Manager style) */}
+      <div className="bg-card p-6 col-span-1 md:col-span-3">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Auto-Processed Calls</h2>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">Latest calls handled by the background worker</p>
+            <h2 className="text-sm font-bold text-gray-900 uppercase">Processed Calls</h2>
+            <p className="text-xs font-medium text-gray-400 mt-0.5">Latest results</p>
           </div>
           <div className="flex items-center gap-3">
-            {ts && <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400"><Clock size={12}/> {ts.toLocaleTimeString('en-AU')}</span>}
-            <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors">
-              <RefreshCw size={12}/> Refresh
+            {ts && <span className="text-xs font-medium text-gray-400">{ts.toLocaleTimeString('en-AU')}</span>}
+            <button onClick={load} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+              <RefreshCw size={14}/>
             </button>
           </div>
         </div>
-        {loading ? <Spinner text="Loading pipeline calls…" /> : calls.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl">📭</div>
-            <p className="text-sm font-bold text-slate-600">No pipeline calls yet</p>
-            <p className="text-xs font-medium text-slate-500 mt-1">Once Bridge i2p uploads files to Drive, they'll appear here.</p>
-          </div>
+
+        {loading ? (
+          <div className="py-8"><Spinner text="Loading calls…" /></div>
+        ) : calls.length === 0 ? (
+          <div className="text-center py-12 text-gray-400 text-sm">No calls processed yet</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-3 border-b border-slate-100">File</th>
-                  <th className="pb-3 border-b border-slate-100">Status</th>
-                  <th className="pb-3 border-b border-slate-100">Duration</th>
-                  <th className="pb-3 border-b border-slate-100">Processed at</th>
-                  <th className="pb-3 border-b border-slate-100">Drive</th>
+                <tr className="text-left text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                  <th className="pb-3 border-b border-gray-100">File</th>
+                  <th className="pb-3 border-b border-gray-100">Status</th>
+                  <th className="pb-3 border-b border-gray-100">Duration</th>
+                  <th className="pb-3 border-b border-gray-100">Processed at</th>
+                  <th className="pb-3 border-b border-gray-100">Drive</th>
                 </tr>
               </thead>
               <tbody>
-                {calls.map(c=>(
-                  <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3.5 pr-4 text-slate-700 font-bold max-w-[200px] truncate">{c.metadata?.filename||`call-${c.id.slice(0,8)}`}</td>
-                    <td className="py-3.5 pr-4"><StatusBadge status={c.status}/></td>
-                    <td className="py-3.5 pr-4 text-slate-500 font-medium tabular text-xs">{c.duration_seconds?`${(c.duration_seconds/60).toFixed(1)} min`:'—'}</td>
-                    <td className="py-3.5 pr-4 text-slate-500 font-medium text-xs">{new Date(c.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
-                    <td className="py-3.5">{c.drive_link?<a href={c.drive_link} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors"><ExternalLink size={14}/></a>:<span className="text-slate-300">—</span>}</td>
+                {calls.map(c => (
+                  <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-3 pr-4 text-gray-700 font-bold max-w-[200px] truncate">
+                      {c.metadata?.filename || `call-${c.id.slice(0, 8)}`}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <StatusBadge status={c.status} />
+                    </td>
+                    <td className="py-3 pr-4 text-gray-500 font-medium tabular text-xs">
+                      {c.duration_seconds ? `${(c.duration_seconds / 60).toFixed(1)}m` : '—'}
+                    </td>
+                    <td className="py-3 pr-4 text-gray-500 font-medium text-xs">
+                      {new Date(c.created_at).toLocaleString('en-AU', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+                    </td>
+                    <td className="py-3">
+                      {c.drive_link ? (
+                        <a href={c.drive_link} target="_blank" rel="noreferrer" className="text-[#ff7b54] hover:text-[#e66a46] transition-colors">
+                          <ExternalLink size={14} />
+                        </a>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
