@@ -37,7 +37,7 @@ SUPABASE_KEY     = os.environ["SUPABASE_KEY"]
 SLACK_WEBHOOK    = os.environ.get("SLACK_WEBHOOK_URL", "")
 SLACK_BOT_TOKEN  = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID", "")
-SLACK_MIN_SECS   = 180   # only notify for calls > 3 minutes
+SLACK_LIMIT      = 180   # notify if call > 3 minutes (OR specific conditions)
 MAX_INLINE_BYTES = 20 * 1024 * 1024  # Gemini inline_data limit
 
 MIME_MAP = {
@@ -545,19 +545,26 @@ def main() -> None:
 
             # 2. Get audio duration (from file metadata, no API needed)
             duration_seconds = get_audio_duration(tmp_path)
-            qualifies        = duration_seconds is not None and duration_seconds > SLACK_MIN_SECS
-
+            
             # 3. Transcribe via Gemini
             transcript = transcribe(tmp_path, suffix)
             print(f"  Transcribed: {len(transcript.split())} words" + (
                 f" · {duration_seconds / 60:.1f} min" if duration_seconds else ""
             ))
 
-            # 4. Upload audio to Slack before deleting (only for qualifying calls)
+            # 4. Score via Gemini
+            scores, agent_name = score_transcript(transcript, rubric_params, duration_seconds)
+            print(f"  Scored: {len(scores)} params" + (f" · Agent: {agent_name}" if agent_name else ""))
+
+            # 5. Determine if it qualifies for Slack AUTOMATICALLY
+            # Criteria: Duration > 3 minutes (SLACK_LIMIT)
+            qualifies = duration_seconds is not None and duration_seconds > SLACK_LIMIT
+
+            # 6. Upload audio to Slack before deleting (only for qualifying calls)
             file_permalink = upload_audio_to_slack(tmp_path, name) if qualifies else None
             os.unlink(tmp_path)
 
-            # 5. Save call to Supabase
+            # 7. Save call to Supabase
             recorded_dt = parse_filename_datetime(name)
             metadata = {
                 "filename":    name,
@@ -619,7 +626,7 @@ def main() -> None:
                 print("  Slack notified")
             else:
                 info = f"{round(duration_seconds)}s" if duration_seconds else "unknown duration"
-                print(f"  Slack skipped — {info} (< {SLACK_MIN_SECS}s threshold)")
+                print(f"  Slack skipped — {info} (did not meet auto-notify criteria)")
 
             print(f"  ✓ Done")
 

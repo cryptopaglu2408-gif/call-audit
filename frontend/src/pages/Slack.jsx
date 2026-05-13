@@ -50,15 +50,30 @@ function buildMessage(call, scores, rubric, config) {
     ...(headerText ? [headerText, ''] : []),
     `${icon} *Call Summary — ${agent}*`,
     `📅 ${date}${includeDuration && duration ? `  ·  ⏱️ ${duration}` : ''}`,
-    `📂 \`${filename}\``,
+    `📂 *${filename}*`,
     '',
     '*Scores:*',
     scoreLines,
     '',
     `*Overall: ${pct !== null ? pct + '%' : '—'} (${earned}/${max})*`,
-    ...(includeLink && call.drive_link ? [`🔗 <${call.drive_link}|Listen to recording>`] : []),
+    ...(includeLink && call.drive_link ? [
+      '',
+      '*Listen to recording:*',
+      call.drive_link.replace(/\/view$/, '')
+    ] : []),
   ]
   return lines.join('\n')
+}
+
+function PreviewLine({ text }) {
+  // Simple Slack-to-HTML formatter for the preview box
+  const formatted = text
+    .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded">$1</code>')
+    .replace(/\\_/g, '_') // Unescape underscores for display
+  
+  return <div dangerouslySetInnerHTML={{ __html: formatted || '&nbsp;' }} className="min-h-[1.2em]" />
 }
 
 export default function Slack() {
@@ -167,19 +182,18 @@ export default function Slack() {
       const scores = scoreMap[call.id] || []
       const msg = buildMessage(call, scores, rubric, config)
       try {
-        const res = await fetch(webhook, {
-          method: 'POST',
-          body: JSON.stringify({ text: msg }),
-          headers: { 'Content-Type': 'application/json' },
+        // Use Supabase Edge Function to bypass CORS
+        const { data, error } = await supabase.functions.invoke('send-slack', {
+          body: { text: msg, callId: call.id }
         })
-        if (res.ok) {
+        
+        if (!error && data?.ok) {
           ok++
           const newMeta = { ...call.metadata, slack_sent_at: now }
           await supabase.from('calls').update({ metadata: newMeta }).eq('id', call.id)
           setCalls(prev => prev.map(c => c.id === call.id ? { ...c, metadata: newMeta } : c))
         } else {
-          const body = await res.text().catch(() => '')
-          const detail = `HTTP ${res.status}${body ? ': ' + body : ''}`
+          const detail = error?.message || data?.error || 'Unknown error'
           errors.push(detail)
           console.error('[Slack send] failed for call', call.id, detail)
         }
@@ -226,7 +240,7 @@ export default function Slack() {
   const scoredCount = calls.filter(c => (scoreMap[c.id] || []).length > 0).length
 
   return (
-    <div className="min-h-full bg-slate-50/50">
+    <div className="min-h-full bg-slate-50/50 pb-24">
       {/* Toast */}
       {sendResult && (
         <div className={`fixed top-5 right-5 z-50 flex items-start gap-3 px-4 py-3 rounded-xl text-sm font-bold shadow-xl max-w-sm
@@ -466,9 +480,11 @@ export default function Slack() {
             </div>
             {previewMsg ? (
               <>
-                <pre className="text-[11px] font-mono text-slate-600 whitespace-pre-wrap leading-relaxed bg-slate-50 rounded-xl p-4 border border-slate-100 overflow-auto max-h-80">
-                  {previewMsg}
-                </pre>
+                <div className="text-[12px] text-slate-600 bg-slate-50 rounded-xl p-4 border border-slate-100 overflow-auto max-h-[500px] shadow-inner space-y-0.5 font-sans leading-relaxed">
+                  {previewMsg.split('\n').map((line, i) => (
+                    <PreviewLine key={i} text={line} />
+                  ))}
+                </div>
                 {previewCall && (
                   <p className="text-[11px] font-medium text-slate-400 mt-2 text-center">
                     {previewCall.metadata?.agent_name || 'Unknown'} ·{' '}

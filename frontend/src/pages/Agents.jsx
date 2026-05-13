@@ -152,7 +152,7 @@ export default function Agents() {
   const filteredAgents = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="min-h-full bg-[#f8f9fa] p-8">
+    <div className="min-h-full bg-[#f8f9fa] p-8 pb-24">
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }

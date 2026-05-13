@@ -134,7 +134,7 @@ export default function Rubric() {
   if (loading) return <Spinner text="Loading rubric…" />
 
   return (
-    <div className="min-h-full bg-slate-50/50">
+    <div className="min-h-full bg-slate-50/50 pb-24">
       {toast && (
         <div className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold shadow-xl ${toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-slate-900 text-white'}`}>
           {toast.type !== 'error' && <CheckCircle2 size={16} className="text-emerald-400" />}

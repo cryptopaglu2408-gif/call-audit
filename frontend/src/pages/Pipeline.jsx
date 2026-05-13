@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import {
   ExternalLink, RefreshCw, Clock, Zap, CheckCircle2, XCircle,
-  Send, Copy, Upload, FileAudio, AlertCircle, Trash2, Play, RotateCcw,
+  Send, Copy, Upload, FileAudio, Trash2, Play, RotateCcw,
 } from 'lucide-react'
 import { supabase, fetchAllScores } from '../lib/supabase'
-import { transcribeAudio, scoreTranscript, getFileDuration, getMimeType } from '../lib/gemini'
+import { getFileDuration, getMimeType } from '../lib/gemini'
 import Spinner from '../components/Spinner'
 import PlayCallButton from '../components/PlayCallButton'
 
@@ -488,27 +488,6 @@ async function sendCallToSlack(file, enrichedScores, rubricParams, agentName, du
   }).catch(e => console.warn('Slack message failed:', e))
 }
 
-// ─── Drive upload helper ──────────────────────────────────────────────────────
-async function uploadToDrive(file, callId) {
-  const mimeType    = getMimeType(file)
-  const storagePath = `${callId}/${file.name}`
-
-  // 1. Upload to Supabase Storage (handles any file size)
-  const { error: upErr } = await supabase.storage
-    .from('call-audio')
-    .upload(storagePath, file, { contentType: mimeType, upsert: true })
-  if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`)
-
-  // 2. Edge function pulls from Storage → pushes to Drive → cleans up Storage
-  const { data, error } = await supabase.functions.invoke('drive-upload-url', {
-    body: { storagePath, filename: file.name, mimeType },
-  })
-  if (error || !data?.id) throw new Error(error?.message || data?.error || 'Drive upload failed')
-
-  const driveLink = `https://drive.google.com/file/d/${data.id}/view`
-  await supabase.from('calls').update({ drive_link: driveLink }).eq('id', callId)
-  return driveLink
-}
 
 // ─── Manual Upload Tab ───────────────────────────────────────────────────────
 const AUDIO_ACCEPT = '.mp3,.mp4,.m4a,.wav,.ogg,.webm,.aac,.flac,.mpeg'
@@ -519,13 +498,11 @@ function ManualUploadTab() {
   const [files, setFiles]       = useState([])   // { id, file, status, error, callId, scores, overallPct }
   const [processing, setProc]   = useState(false)
   const [rubric, setRubric]     = useState(null)
-  const [apiKeyMissing, setApiKeyMissing] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [expanded, setExpanded] = useState(new Set())
   const inputRef                = useRef()
 
   useEffect(() => {
-    if (!import.meta.env.VITE_GEMINI_API_KEY) setApiKeyMissing(true)
     supabase.from('rubrics').select('id, name, parameters').eq('is_active', true).limit(1)
       .then(({ data }) => { if (data?.[0]) setRubric(data[0]) })
   }, [])
@@ -536,6 +513,7 @@ function ManualUploadTab() {
       error: null, callId: null, scores: null, overallPct: null,
       // cached intermediate results — survive retries so we skip completed stages
       transcript: null, durationSeconds: null, agentName: null, enrichedScores: null,
+      storagePath: null,  // set on first upload, reused on retry
     }))
     setFiles(prev => [...prev, ...items])
   }
@@ -588,51 +566,75 @@ function ManualUploadTab() {
     setProc(true)
 
     for (const item of pending) {
+      const mimeType = getMimeType(item.file)
+
+      // ── Stage 0: upload to Supabase Storage (skip if already done) ────────
+      let storagePath = item.storagePath
+      if (!storagePath) {
+        storagePath = `${crypto.randomUUID()}/${item.file.name}`
+        updateFile(item.id, { storagePath, status: 'transcribing' })
+        const { error: upErr } = await supabase.storage
+          .from('call-audio')
+          .upload(storagePath, item.file, { contentType: mimeType, upsert: true })
+        if (upErr) {
+          updateFile(item.id, { status: 'error', error: `Upload failed: ${upErr.message}` })
+          continue
+        }
+      }
+
       // ── Stage 1: duration (always cheap, re-run) ──────────────────────────
       const durationSeconds = item.durationSeconds ?? await getFileDuration(item.file)
       if (item.durationSeconds == null) updateFile(item.id, { durationSeconds })
 
-      // ── Stage 2: transcription (skip if cached from a previous attempt) ───
+      // ── Stage 2: transcription via Vertex AI edge function ─────────────────
       let transcript = item.transcript
       if (!transcript) {
         updateFile(item.id, { status: 'transcribing' })
         try {
-          transcript = await transcribeAudio(item.file)
-          updateFile(item.id, { transcript })   // cache so retries skip this stage
+          const { data: txData, error: txErr } = await supabase.functions.invoke('transcribe-audio', {
+            body: { storagePath, mimeType },
+          })
+          if (txErr) throw new Error(txData?.error || txErr.message)
+          if (!txData?.transcript) throw new Error(txData?.error || 'Empty transcript returned')
+          transcript = txData.transcript
+          updateFile(item.id, { transcript })
         } catch (err) {
           updateFile(item.id, { status: 'error', error: `Transcription failed: ${err.message}` })
           continue
         }
       } else {
-        updateFile(item.id, { status: 'scoring' })   // show progress even when skipping
+        updateFile(item.id, { status: 'scoring' })
       }
 
-      // ── Stage 3: scoring (skip if cached) ────────────────────────────────
+      // ── Stage 3: scoring via Vertex AI edge function ───────────────────────
       let enrichedScores = item.enrichedScores
       let agentName      = item.agentName
       if (!enrichedScores) {
         updateFile(item.id, { status: 'scoring' })
-        let rawScores
         try {
-          const result = await scoreTranscript(transcript, rubric.parameters, { durationSeconds })
-          rawScores = result.scores
-          agentName = result.agentName
+          const { data: scData, error: scErr } = await supabase.functions.invoke('score-transcript', {
+            body: { transcript, rubricParams: rubric.parameters, durationSeconds: durationSeconds ?? null },
+          })
+          if (scErr) throw new Error(scErr.message)
+          if (!scData?.scores) throw new Error(scData?.error || 'Empty scoring response')
+          const rawScores = scData.scores
+          agentName = scData.agentName || null
+
+          const scoredNames   = new Set(rawScores.map(s => s.parameter))
+          const missingScores = rubric.parameters
+            .filter(p => !scoredNames.has(p.name))
+            .map(p => ({ parameter: p.name, score: 0, reasoning: '', max_score: p.max_score }))
+          const rubricOrder   = Object.fromEntries(rubric.parameters.map((p, i) => [p.name, i]))
+          enrichedScores = [...rawScores.map(s => ({
+            ...s,
+            max_score: rubric.parameters.find(p => p.name === s.parameter)?.max_score ?? 10,
+          })), ...missingScores].sort((a, b) => (rubricOrder[a.parameter] ?? 999) - (rubricOrder[b.parameter] ?? 999))
+
+          updateFile(item.id, { enrichedScores, agentName })
         } catch (err) {
           updateFile(item.id, { status: 'error', error: `Scoring failed: ${err.message}` })
           continue
         }
-
-        const scoredNames   = new Set(rawScores.map(s => s.parameter))
-        const missingScores = rubric.parameters
-          .filter(p => !scoredNames.has(p.name))
-          .map(p => ({ parameter: p.name, score: 0, reasoning: '', max_score: p.max_score }))
-        const rubricOrder   = Object.fromEntries(rubric.parameters.map((p, i) => [p.name, i]))
-        enrichedScores = [...rawScores.map(s => ({
-          ...s,
-          max_score: rubric.parameters.find(p => p.name === s.parameter)?.max_score ?? 10,
-        })), ...missingScores].sort((a, b) => (rubricOrder[a.parameter] ?? 999) - (rubricOrder[b.parameter] ?? 999))
-
-        updateFile(item.id, { enrichedScores, agentName })  // cache so retries skip this stage
       } else {
         updateFile(item.id, { status: 'saving' })
       }
@@ -669,14 +671,22 @@ function ManualUploadTab() {
         updateFile(item.id, { status: 'done', callId, scores: enrichedScores, overallPct })
         setExpanded(prev => new Set(prev).add(item.id))
 
-        // Upload to Drive manual folder (best-effort, non-blocking)
+        // Move to Drive — file already in Storage, edge function pulls + deletes (best-effort)
         updateFile(item.id, { driveStatus: 'uploading' })
-        uploadToDrive(item.file, callId)
-          .then(driveLink => updateFile(item.id, { driveStatus: 'done', driveLink }))
-          .catch(e => {
+        ;(async () => {
+          try {
+            const { data, error } = await supabase.functions.invoke('drive-upload-url', {
+              body: { storagePath, filename: item.file.name, mimeType },
+            })
+            if (error || !data?.id) throw new Error(error?.message || data?.error || 'Drive upload failed')
+            const driveLink = `https://drive.google.com/file/d/${data.id}/view`
+            await supabase.from('calls').update({ drive_link: driveLink }).eq('id', callId)
+            updateFile(item.id, { driveStatus: 'done', driveLink })
+          } catch (e) {
             console.error('[Drive upload] failed:', e)
             updateFile(item.id, { driveStatus: 'error', driveError: e.message })
-          })
+          }
+        })()
 
         sendCallToSlack(item.file, enrichedScores, rubric.parameters, agentName, durationSeconds, overallPct)
           .catch(e => console.warn('Slack notification failed:', e))
@@ -695,16 +705,6 @@ function ManualUploadTab() {
 
   return (
     <div className="space-y-4">
-      {apiKeyMissing && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 text-sm text-amber-800">
-          <AlertCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
-          <div>
-            <p className="font-bold">Gemini API key not set</p>
-            <p className="mt-1 text-xs">Add <code className="bg-amber-100 px-1 rounded">VITE_GEMINI_API_KEY=your_key</code> to <code className="bg-amber-100 px-1 rounded">frontend/.env.local</code> and restart. Get a free key at <strong>aistudio.google.com</strong>.</p>
-          </div>
-        </div>
-      )}
-
       {rubric && (
         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2 text-xs text-emerald-700 font-bold w-fit">
           <CheckCircle2 size={13} />
@@ -731,7 +731,7 @@ function ManualUploadTab() {
           {files.length > 0 && pendingCount > 0 && (
             <button
               onClick={e => { e.stopPropagation(); processAll() }}
-              disabled={processing || !rubric || apiKeyMissing}
+              disabled={processing || !rubric}
               className="ml-auto flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 px-4 py-2 rounded-xl shadow-sm transition-all shrink-0"
             >
               <Play size={12}/> {processing ? 'Processing…' : `Process ${pendingCount}`}
@@ -889,7 +889,7 @@ function ManualUploadTab() {
       {files.length > 0 && pendingCount > 0 && !processing && (
         <button
           onClick={processAll}
-          disabled={!rubric || apiKeyMissing}
+          disabled={!rubric}
           className="w-full flex items-center justify-center gap-2 text-sm font-bold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 py-3 rounded-xl shadow-sm transition-all"
         >
           <Play size={14}/> Process {pendingCount} file{pendingCount !== 1 ? 's' : ''}
@@ -904,7 +904,7 @@ export default function Pipeline() {
   const [tab, setTab] = useState('auto')
 
   return (
-    <div className="min-h-full bg-slate-50/50">
+    <div className="min-h-full bg-slate-50/50 pb-24">
       <div className="bg-white/90 backdrop-blur-sm border-b border-slate-200/60 px-8 py-6 sticky top-0 z-10">
         <div className="flex items-start justify-between mb-5">
           <div>

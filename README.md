@@ -1,53 +1,97 @@
-# Call Audit
+# SuperSheldon Call Audit 🎙️
 
-End-to-end call-quality auditing pipeline. Upload a spreadsheet of Google Drive audio links, transcribe each call locally with **faster-whisper**, and score it against a user-defined rubric using a **Gemma 4** judge that you can fine-tune on your own gold-standard scores.
+An automated quality assurance pipeline for edtech sales calls. This system monitors recordings, transcribes them using Google Cloud Speech-to-Text (Chirp 2), scores them against a strict quality rubric using Gemini 2.5 Flash, and notifies the team via Slack.
 
-## Stack
+## 🚀 Key Features
 
-| Tier | Tool |
-| --- | --- |
-| UI | React + Vite + Tailwind (preferred) — Streamlit kept as legacy |
-| Backend API | FastAPI (wraps the pipeline + semantic search) |
-| Sheet parsing | pandas + openpyxl |
-| Drive fetch | gdown |
-| Transcription | faster-whisper (CTranslate2, CPU-friendly; auto-promotes to CUDA fp16) |
-| LLM judge | **Gemma 4 E4B** — Ollama (CPU) or HuggingFace transformers (GPU / fine-tuning) |
-| Fine-tuning | Unsloth QLoRA |
-| Database | Supabase (Postgres + Storage + pgvector) |
-| Semantic search | sentence-transformers + pgvector |
+### 1. Automated Call Transcription
+- **Multi-Accent Support**: Uses Google's **Chirp 2** model, specifically tuned for Indian-accented English (sales agents) and Australian/UK English (parents).
+- **Direct Drive Integration**: Automatically pulls new recordings from Google Drive and pushes the final "clean" versions back for archival.
+- **Brand-Aware Transcription**: Custom prompts ensure "SuperSheldon" is transcribed correctly, avoiding common hallucinations like "Super Children".
 
-## Setup
+### 2. AI-Powered Quality Audit (The Judge)
+- **Strict Scoring Logic**: Powered by a fine-tuned **Gemini 2.5 Flash** model. It doesn't just "summarize"; it looks for literal evidence (exact quotes) before awarding points.
+- **10-Parameter Rubric**: Comprehensive evaluation covering Call Opening, Reason for Calling, Customer Need Assessment, Problem Identification, USP Discussion, Intent Checks, Demo Pitching, Pricing Disclosure, and Professional Closing.
+- **Evidence-Based Feedback**: Every score entry includes a "Reasoning" field containing the exact transcript quote used as evidence for the verdict.
 
-### 1. Install runtime deps
+### 3. Pipeline Management Dashboard
+- **Real-Time Monitoring**: Track calls through six stages: Audio Fetch, Metadata Extraction, Transcription, Drive Upload, AI Scoring, and Slack Notification.
+- **One-Click Retries**: If a stage fails (e.g., a network error during upload), the dashboard allows for granular state-based retries without reprocessing the entire call.
+- **Progressive Disclosure**: Detailed logs for every step are available directly in the UI for rapid debugging.
 
-```bash
-pip install -r requirements.txt
-```
+### 4. Results & Analytics
+- **Agent Performance Metrics**: Scorecards for each sales agent, displaying average scores across different rubric parameters.
+- **Interactive Audio Player**: Syncs the transcript with the audio playback, allowing auditors to click any part of the transcript to jump to that moment in the call.
+- **Score Distribution**: Visual breakdown of metrics to identify systemic weaknesses in the sales pitch (e.g., "Why are we consistently failing USP Discussion?").
 
-### 2. Supabase
+### 5. Seamless Integrations
+- **Supabase Backend**: Leveraging Postgres with `pgvector` for potential future semantic search capabilities.
+- **Edge Runtime**: High-concurrency processing using Supabase Edge Functions (Deno).
+- **Slack Notifications**: Instant alerts sent to configured channels for every audited call, including the final score and a link to the full report.
 
-- Create a project at [supabase.com](https://supabase.com).
-- In the SQL editor, run [supabase/schema.sql](supabase/schema.sql).
-- Create a public storage bucket called `call-audio`.
+## 🏗️ Architecture
 
-### 3. Install Ollama + pull Gemma 4
+1.  **Audio Ingestion**: Bridge i2p recordings sync to a specific Google Drive folder.
+2.  **Edge Pipeline**: Supabase Edge Functions fetch audio, transcribe it, and store metadata.
+3.  **LLM Audit**: A fine-tuned Gemini 2.5 Flash model evaluates the transcript based on a 10-parameter rubric.
+4.  **Reporting**: Final scores are stored in Supabase and pushed to Slack for immediate feedback.
 
-The default judge runs through Ollama (CPU-friendly, ~250MB model file at int4).
+## 📁 Repository Structure
 
-```bash
-# Install: https://ollama.com/download
-ollama serve         # if not already running as a service
+*   `frontend/`: React + Vite + Tailwind dashboard for viewing results and managing rubrics.
+*   `supabase/`: Database schema and Edge Functions (`transcribe-audio`, `score-transcript`, `drive-upload-url`).
+*   `pipeline/`: Python-based Cloud Run job for automated batch processing.
+*   `training/`: Scripts and datasets for fine-tuning the auditor model.
 
-# Pull a Gemma model (pick one):
-ollama pull gemma3:4b                                     # safe default
-ollama pull hf.co/unsloth/gemma-4-E4B-it-GGUF:Q4_K_M      # Gemma 4 E4B (recommended)
-```
+## 🚀 Getting Started
 
-### 4. Environment
+### Prerequisites
 
-```bash
-cp .env.example .env
-# fill in SUPABASE_URL, SUPABASE_KEY (service-role key)
+*   Node.js 18+ & npm
+*   Google Cloud Project (with Drive, STT, and Vertex AI enabled)
+*   Supabase CLI
+
+### Setup
+
+1.  **Clone the repo:**
+    ```bash
+    git clone https://github.com/your-org/call-audit.git
+    cd call-audit
+    ```
+
+2.  **Supabase Auth (Required for Google Drive):**
+    You must set these secrets in Supabase to allow the pipeline to upload to your personal Google Drive quota:
+    ```bash
+    supabase secrets set GOOGLE_CLIENT_ID="..."
+    supabase secrets set GOOGLE_CLIENT_SECRET="..."
+    supabase secrets set GOOGLE_REFRESH_TOKEN="..."
+    ```
+
+3.  **Install Frontend:**
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+
+## ⚖️ The Rubric
+
+Calls are scored on a scale of 0-70 across these key areas:
+*   **Opening (10 pts)**: Name & company introduction.
+*   **Needs Assessment (10 pts)**: Grade level, subjects, and performance.
+*   **USP Discussion (10 pts)**: Differentiation and 1-on-1 focus.
+*   **Pitch & Close (20 pts)**: Demo scheduling and professional sign-off.
+*   **Binary Checks**: Problem identified? Price discussed? Intent check done?
+
+## 🛠️ Deployment
+
+*   **Edge Functions**: `supabase functions deploy [function-name] --no-verify-jwt`
+*   **Frontend**: Deployed on Netlify (see `netlify.toml`).
+*   **Database**: Migrations are handled via `supabase/schema.sql`.
+
+## 📄 License
+Internal use only for SuperSheldon.
+
 ```
 
 Defaults already point at:

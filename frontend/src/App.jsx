@@ -27,7 +27,7 @@ function AppLayout() {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-auto pb-20">
+      <main className="flex-1 overflow-auto">
         <Routes>
           <Route path="/"         element={<Dashboard />} />
           <Route path="/results"  element={<Results />} />

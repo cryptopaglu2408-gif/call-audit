@@ -241,7 +241,7 @@ export default function Dashboard() {
   const monthName = today.toLocaleDateString('en-AU', { month: 'long' })
 
   return (
-    <div className="min-h-full bg-[#f8f9fa] p-8">
+    <div className="min-h-full bg-[#f8f9fa] p-8 pb-24">
 
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Top KPI Section (Image Style) */}

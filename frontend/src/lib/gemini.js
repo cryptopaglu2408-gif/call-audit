@@ -1,6 +1,6 @@
 const API_KEY  = import.meta.env.VITE_GEMINI_API_KEY
-const BASE_URL = 'https://aiplatform.googleapis.com/v1'
-const MODEL    = 'publishers/google/models/gemini-2.5-flash'
+const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
+const MODEL    = 'gemini-2.5-flash'
 
 const MIME_MAP = {
   mp3:  'audio/mpeg',
@@ -252,14 +252,14 @@ export async function transcribeAudio(file) {
   return text.trim()
 }
 
-export async function scoreTranscript(transcript, rubricParams, { durationSeconds } = {}) {
+export function buildScoringPrompt(transcript, rubricParams, { durationSeconds } = {}) {
   const metaSection = durationSeconds != null
     ? `\n## CALL METADATA\nDuration: ${Math.floor(durationSeconds / 60)}m ${Math.round(durationSeconds % 60)}s (${Math.round(durationSeconds)}s total) — Longer than 3 minutes: ${durationSeconds > 180 ? 'YES' : 'NO'}`
     : '\n## CALL METADATA\nDuration: not available'
 
   const rubricSection = rubricParams.map(p => buildParamRubric(p)).join('\n\n')
 
-  const prompt = `${SCORE_CONTEXT}
+  return `${SCORE_CONTEXT}
 
 ## MANDATORY SCORING PROCESS — follow for EVERY parameter
 You MUST work through these steps in order for each parameter. Do not skip any step.
@@ -292,12 +292,15 @@ ${transcript}
 Respond ONLY with valid JSON — no markdown fences, no extra text:
 {"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: '...' | sub-criteria results | SCORE: N>"}]}
 You must return exactly ${rubricParams.length} score objects — one per parameter above, using the exact parameter name shown.`
+}
 
+export async function scoreTranscript(transcript, rubricParams, options = {}) {
+  const prompt = buildScoringPrompt(transcript, rubricParams, options)
   const text = await callGemini({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       responseMimeType: 'application/json',
-      temperature: 0,   // deterministic — same transcript → same scores every time
+      temperature: 0,
     },
   })
 
