@@ -17,15 +17,16 @@ export default function Sidebar() {
   const username = user?.email?.split('@')[0] ?? ''
 
   return (
-    <aside className="w-[80px] hover:w-[240px] bg-gradient-to-b from-[#0d1117] to-[#05070a] flex flex-col shrink-0 border-r border-white/5 transition-[width] duration-300 ease-in-out group z-20 [will-change:width]">
+    <aside className="w-[80px] hover:w-[240px] bg-gradient-to-b from-[#0f172a] to-[#020617] flex flex-col shrink-0 border-r border-white/5 transition-[width] duration-300 ease-in-out group z-20 [will-change:width]">
       {/* Brand */}
       <div className="px-4 pt-7 pb-6 overflow-hidden">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shrink-0 transform hover:rotate-12 transition-transform duration-300">
+          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shrink-0 transform hover:scale-105 transition-transform duration-300 shadow-md border border-white/10">
             <img src="/logo.png" alt="Call Audit Logo" className="w-full h-full object-contain" />
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap flex flex-col justify-center">
-            <p className="text-white font-bold text-sm tracking-tight">Call Audit</p>
+            <p className="text-white font-bold text-sm tracking-tight uppercase">Call Audit</p>
+            <p className="text-white/40 text-[10px] font-medium">Internal Tool</p>
           </div>
         </div>
       </div>
@@ -33,7 +34,7 @@ export default function Sidebar() {
       <div className="mx-4 h-px bg-white/5 mb-4" />
 
       {/* Nav */}
-      <nav className="flex-1 px-4 space-y-2 overflow-hidden">
+      <nav className="flex-1 px-4 space-y-1 overflow-hidden">
         <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">Menu</p>
         {links.map(({ to, label, Icon }) => (
           <NavLink
@@ -43,21 +44,21 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-3 h-10 rounded-xl text-[13px] font-semibold transition-all duration-300 overflow-hidden ${
                 isActive
-                  ? 'bg-white/10 text-white shadow-sm'
-                  : 'text-white/40 hover:text-white/80 hover:bg-white/5'
+                  ? 'bg-gradient-to-r from-indigo-500/15 to-purple-500/10 text-white shadow-sm border-l-2 border-indigo-500'
+                  : 'text-white/40 hover:text-white/80 hover:bg-white/5 border-l-2 border-transparent'
               }`
             }
           >
             {({ isActive }) => (
               <>
                 <div className="w-10 h-10 flex items-center justify-center shrink-0">
-                  <Icon size={18} className={isActive ? 'text-green-400' : 'text-white/40'} />
+                  <Icon size={18} className={isActive ? 'text-indigo-400' : 'text-white/40'} />
                 </div>
                 <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
                   {label}
                 </span>
                 {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 shadow-lg shadow-green-400/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mr-4" />
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-lg shadow-indigo-400/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mr-4" />
                 )}
               </>
             )}
@@ -68,7 +69,7 @@ export default function Sidebar() {
       {/* User + logout */}
       <div className="px-4 py-5 border-t border-white/5">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/10">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center shrink-0 border border-white/10">
             <span className="text-white/70 text-xs font-bold">{initials}</span>
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex-1 min-w-0">

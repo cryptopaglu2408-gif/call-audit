@@ -72,7 +72,7 @@ export default function Login() {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-900/50 mb-4">
             <span className="text-white text-lg font-black">CA</span>
           </div>
-          <h1 className="text-white text-2xl font-black tracking-tight">Call Audit</h1>
+          <h1 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-600">Call Audit</h1>
           <p className="text-white/30 text-sm font-medium mt-1">SuperSheldon · Internal tool</p>
         </div>
 

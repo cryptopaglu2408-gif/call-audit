@@ -705,55 +705,47 @@ function ManualUploadTab() {
 
   return (
     <div className="space-y-4">
-      {rubric && (
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2 text-xs text-emerald-700 font-bold w-fit">
-          <CheckCircle2 size={13} />
-          <span>Active rubric: <strong>{rubric.name}</strong> · {rubric.parameters.length} parameters · Threshold: {VERDICT_THRESHOLD}%</span>
-        </div>
-      )}
 
-      {/* Compact drop zone */}
-      <div
-        onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
-        onClick={() => inputRef.current?.click()}
-        className={`relative bg-white rounded-xl border-2 border-dashed transition-all cursor-pointer ${dragging ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-slate-50'}`}
-      >
-        <input ref={inputRef} type="file" multiple accept={AUDIO_ACCEPT} className="hidden"
-          onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-        <div className="flex items-center gap-4 px-5 py-4 select-none">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${dragging ? 'bg-violet-100' : 'bg-slate-100'}`}>
-            <Upload size={18} className={dragging ? 'text-violet-500' : 'text-slate-400'} />
+
+      {/* New Drop Zone based on image */}
+      <div className="flex justify-center mb-6">
+        <div
+          onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
+          onClick={() => inputRef.current?.click()}
+          className={`relative bg-white rounded-2xl border-2 border-dashed transition-all cursor-pointer ${dragging ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-400'} shadow-sm w-full max-w-2xl flex flex-col items-center justify-center text-center p-8`}
+        >
+          <input ref={inputRef} type="file" multiple accept={AUDIO_ACCEPT} className="hidden"
+            onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+          
+          {/* Icon in circle */}
+          <div className="w-14 h-14 rounded-full bg-purple-50 flex items-center justify-center mb-4">
+            <Upload size={24} className="text-purple-600" />
           </div>
+          
           <div>
-            <p className="text-sm font-bold text-slate-700">{dragging ? 'Drop files here' : 'Drag & drop audio files'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">or click to browse · MP3, M4A, WAV, AAC, FLAC and more</p>
+            <p className="text-sm font-medium text-gray-700">
+              <span className="text-purple-600 font-bold hover:underline">Click here</span> to upload your file or drag and drop.
+            </p>
+            <p className="text-xs text-gray-400 mt-2">Supported Format: MP3, WAV, M4A, etc. (Max 100MB)</p>
           </div>
-          {files.length > 0 && pendingCount > 0 && (
-            <button
-              onClick={e => { e.stopPropagation(); processAll() }}
-              disabled={processing || !rubric}
-              className="ml-auto flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 px-4 py-2 rounded-xl shadow-sm transition-all shrink-0"
-            >
-              <Play size={12}/> {processing ? 'Processing…' : `Process ${pendingCount}`}
-            </button>
-          )}
         </div>
       </div>
 
       {/* File list with results */}
       {files.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+        <div className="space-y-4 max-w-2xl mx-auto mb-6">
+          {/* Header with actions */}
+          <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{files.length} file{files.length !== 1 ? 's' : ''}</span>
               {doneCount  > 0 && <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">{doneCount} done</span>}
               {errorCount > 0 && <span className="text-[11px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full font-bold">{errorCount} failed</span>}
               {activeCount > 0 && <span className="text-[11px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full font-bold animate-pulse">Processing…</span>}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {errorCount > 0 && !processing && (
                 <button onClick={retryAll}
-                  className="flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors">
+                  className="flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-700 transition-colors">
                   <RotateCcw size={11}/> Retry all failed
                 </button>
               )}
@@ -765,49 +757,74 @@ function ManualUploadTab() {
             </div>
           </div>
 
-          <div className="divide-y divide-slate-50">
-            {files.map(item => {
-              const isApproved = item.overallPct !== null && item.overallPct >= VERDICT_THRESHOLD
-              const isExpanded = expanded.has(item.id)
+          {files.map(item => {
+            const isApproved = item.overallPct !== null && item.overallPct >= VERDICT_THRESHOLD
+            const isExpanded = expanded.has(item.id)
+            
+            const isDone = item.status === 'done'
+            const isError = item.status === 'error'
+            const isProcessing = ['transcribing', 'scoring', 'saving'].includes(item.status)
+            
+            let barColor = 'bg-purple-600'
+            let barWidth = '50%'
+            let statusText = 'Processing...'
+            
+            if (isDone) {
+              barColor = 'bg-emerald-500'
+              barWidth = '100%'
+              statusText = 'Upload Successful!'
+            } else if (isError) {
+              barColor = 'bg-rose-500'
+              barWidth = '100%'
+              statusText = item.error || 'Upload failed! Please try again.'
+            } else if (isProcessing) {
+              barColor = 'bg-purple-600'
+              barWidth = '60%'
+              statusText = item.status === 'transcribing' ? 'Transcribing...' : item.status === 'scoring' ? 'Scoring...' : 'Saving...'
+            }
 
-              return (
-                <div key={item.id}>
-                  <div className="flex items-center gap-3 px-5 py-3.5">
-                    {/* Icon */}
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${item.status === 'done' ? (isApproved ? 'bg-emerald-50' : 'bg-rose-50') : item.status === 'error' ? 'bg-rose-50' : 'bg-slate-100'}`}>
-                      {item.status === 'done'
-                        ? isApproved
-                          ? <CheckCircle2 size={15} className="text-emerald-500" />
-                          : <XCircle size={15} className="text-rose-400" />
-                        : item.status === 'error'
-                        ? <XCircle size={15} className="text-rose-400" />
-                        : <FileAudio size={15} className="text-slate-400" />
-                      }
+            return (
+              <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                <div className="flex items-center gap-4">
+                  {/* Left Icon */}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-50' : isError ? 'bg-rose-50' : 'bg-purple-50'}`}>
+                    <FileAudio size={18} className={isDone ? 'text-emerald-500' : isError ? 'text-rose-500' : 'text-purple-600'} />
+                  </div>
+
+                  {/* Middle Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="text-sm font-semibold text-gray-700 truncate">{item.file.name}</p>
+                      <div className="flex items-center gap-2">
+                        {isDone && <CheckCircle2 size={16} className="text-emerald-500" />}
+                        {isError && <Trash2 size={16} className="text-rose-500 cursor-pointer" onClick={() => removeFile(item.id)} />}
+                        {!isDone && !isError && <Trash2 size={16} className="text-gray-400 cursor-pointer" onClick={() => removeFile(item.id)} />}
+                      </div>
                     </div>
 
-                    {/* Name + size */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-700 truncate">{item.file.name}</p>
-                      {item.error
-                        ? <p className="text-[11px] text-rose-500 mt-0.5 truncate">{item.error}</p>
-                        : <p className="text-[11px] text-slate-400 mt-0.5">
-                            {(item.file.size / 1024 / 1024).toFixed(1)} MB
-                            {item.driveStatus === 'uploading' && <span className="ml-2 text-violet-400 animate-pulse">· Saving to Drive…</span>}
-                            {item.driveStatus === 'done'     && <span className="ml-2 text-emerald-500">· Saved to Drive</span>}
-                            {item.driveStatus === 'error'    && <span className="ml-2 text-rose-400" title={item.driveError}>· Drive failed: {item.driveError}</span>}
-                          </p>
-                      }
+                    {/* Progress Bar */}
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
+                      <div className={`h-full ${barColor} rounded-full transition-all duration-500`} style={{ width: barWidth }} />
                     </div>
 
-                    {/* Done: verdict + score + expand toggle */}
-                    {item.status === 'done' && item.overallPct !== null ? (
+                    <div className="flex justify-between items-center text-xs text-gray-400">
+                      <span className="truncate max-w-[200px]">{statusText}</span>
+                      <span>{isDone ? '100%' : isError ? 'Failed' : '60%'}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 ml-2">
+                    {isError && (
+                      <button onClick={() => retryFile(item.id)} className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1">
+                        <RotateCcw size={12} /> Try Again
+                      </button>
+                    )}
+                    {isDone && (
                       <>
                         {item.driveLink && <PlayCallButton call={{ id: item.callId, drive_link: item.driveLink, metadata: { filename: item.file.name } }} />}
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold animate-pop-in ${isApproved ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'}`}>
-                          {isApproved ? '✓ Approved' : '✕ Rejected'}
-                        </span>
-                        <span className={`text-sm font-black tabular animate-pop-in ${isApproved ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {item.overallPct}%
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isApproved ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
+                          {isApproved ? 'Approved' : 'Rejected'}
                         </span>
                         <button
                           onClick={() => toggleExpand(item.id)}
@@ -816,81 +833,42 @@ function ManualUploadTab() {
                           {isExpanded ? '▲ Hide' : '▼ Scores'}
                         </button>
                       </>
-                    ) : item.status === 'error' ? (
-                      <button
-                        onClick={() => retryFile(item.id)}
-                        className="flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-500 border border-rose-200 hover:border-rose-500 px-3 py-1.5 rounded-lg transition-all shrink-0"
-                        title={item.transcript ? (item.enrichedScores ? 'Retry saving to Supabase' : 'Retry scoring (transcript cached)') : 'Retry from scratch'}
-                      >
-                        <RotateCcw size={11}/> Retry
-                      </button>
-                    ) : item.status === 'pending' ? (
-                      <button onClick={() => removeFile(item.id)} className="p-1.5 text-slate-300 hover:text-slate-500 rounded-lg transition-colors">
-                        <Trash2 size={13} />
-                      </button>
-                    ) : (
-                      <FileBadge status={item.status} />
                     )}
                   </div>
-
-                  {/* Expanded scores */}
-                  {item.status === 'done' && isExpanded && item.scores && (
-                    <div className="px-5 pb-4 pt-1 space-y-2 bg-slate-50/50">
-                      {item.scores.map(s => {
-                        const pct     = Math.round(s.score / s.max_score * 100)
-                        const isYesNo = s.max_score === 2
-                        const isCat   = s.max_score === 3
-                        const isYes   = s.score === s.max_score
-                        const DEMO_LEVELS = [
-                          { label: 'Not attempted',     color: 'bg-slate-100 text-slate-500' },
-                          { label: 'Mentioned, declined', color: 'bg-rose-50 text-rose-500' },
-                          { label: 'Callback booked',   color: 'bg-amber-50 text-amber-600' },
-                          { label: 'Demo confirmed',    color: 'bg-emerald-50 text-emerald-700' },
-                        ]
-                        const catLevel = DEMO_LEVELS[Math.min(s.score, 3)]
-                        return (
-                          <div key={s.parameter} className="flex items-center gap-3">
-                            <span className="text-[11px] font-medium text-slate-600 w-44 shrink-0 truncate">{s.parameter}</span>
-                            {isYesNo ? (
-                              <span className={`px-3 py-1 rounded-lg text-xs font-bold ${isYes ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-50 text-rose-500'}`}>
-                                {isYes ? 'Yes' : 'No'}
-                              </span>
-                            ) : isCat ? (
-                              <div className="flex items-center gap-2">
-                                <span className={`px-3 py-1 rounded-lg text-xs font-bold ${catLevel.color}`}>
-                                  {catLevel.label}
-                                </span>
-                                <span className="text-xs text-slate-300">{s.score}/{s.max_score}</span>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full ${pct >= 70 ? 'bg-emerald-400' : pct >= 40 ? 'bg-amber-400' : 'bg-rose-400'}`}
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                                <span className="text-[11px] font-bold text-slate-500 tabular w-10 text-right">{s.score}/{s.max_score}</span>
-                              </>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
                 </div>
-              )
-            })}
-          </div>
+
+                {/* Expanded scores */}
+                {isDone && isExpanded && item.scores && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                    {item.scores.map(s => {
+                      const pct     = Math.round(s.score / s.max_score * 100)
+                      return (
+                        <div key={s.parameter} className="flex items-center gap-3">
+                          <span className="text-[11px] font-medium text-slate-600 w-44 shrink-0 truncate">{s.parameter}</span>
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${pct >= 70 ? 'bg-gradient-to-r from-emerald-400 to-teal-500' : pct >= 40 ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gradient-to-r from-rose-400 to-pink-500'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-bold text-slate-500 tabular w-10 text-right">{s.score}/{s.max_score}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* Process button when files exist but button not shown in drop zone */}
+      {/* Process button when files exist */}
       {files.length > 0 && pendingCount > 0 && !processing && (
         <button
           onClick={processAll}
           disabled={!rubric}
-          className="w-full flex items-center justify-center gap-2 text-sm font-bold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 disabled:opacity-40 py-3 rounded-xl shadow-sm transition-all"
+          className="w-full flex items-center justify-center gap-2 text-sm font-bold text-white bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:from-pink-600 hover:via-purple-600 hover:to-indigo-600 disabled:opacity-40 py-3 rounded-md shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
         >
           <Play size={14}/> Process {pendingCount} file{pendingCount !== 1 ? 's' : ''}
         </button>
@@ -901,7 +879,7 @@ function ManualUploadTab() {
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
 export default function Pipeline() {
-  const [tab, setTab] = useState('auto')
+  const [tab, setTab] = useState('manual')
 
   return (
     <div className="min-h-full bg-slate-50/50 pb-24">
@@ -909,10 +887,11 @@ export default function Pipeline() {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">Pipeline</h1>
-            <p className="text-sm font-medium text-slate-400 mt-0.5">Automated call processing · every 30 minutes</p>
+
           </div>
         </div>
-        <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl w-fit border border-slate-200/60">
+        {/* Tab switcher hidden for now */}
+        {/* <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl w-fit border border-slate-200/60">
           {[
             { id:'auto',   label:'Auto Pipeline' },
             { id:'manual', label:'Manual Upload'  },
@@ -922,7 +901,7 @@ export default function Pipeline() {
               {label}
             </button>
           ))}
-        </div>
+        </div> */}
       </div>
 
       <div className="p-8 max-w-5xl mx-auto">
