@@ -440,7 +440,6 @@ async function uploadAudioToSlack(file) {
 }
 
 async function sendCallToSlack(file, enrichedScores, rubricParams, agentName, durationSeconds, overallPct) {
-  if (!SLACK_URL) return
   if (!durationSeconds || durationSeconds <= 180) return  // only for calls > 3 min
 
   const rubricOrder = Object.fromEntries(rubricParams.map((p, i) => [p.name, i]))
@@ -472,7 +471,27 @@ async function sendCallToSlack(file, enrichedScores, rubricParams, agentName, du
       val = `${s.score}/${s.max_score}  ${filled}${empty}`
     }
     const lines = [`*${s.parameter}*: ${val}`]
-    if (s.reasoning) lines.push(`  _${s.reasoning}_`)
+    if (s.reasoning) {
+      const impIdx = s.reasoning.indexOf('| IMPROVEMENT:')
+      let improvement = null
+      let mainPart = s.reasoning
+      if (impIdx !== -1) {
+        improvement = s.reasoning.substring(impIdx + 14).trim()
+        mainPart = s.reasoning.substring(0, impIdx).trim()
+      }
+      
+      let evidence = null
+      const cleanedMainPart = mainPart.replace(/^\[OVERRIDE\]\s*/, '')
+      if (cleanedMainPart.startsWith('EVIDENCE:')) {
+        const pipeIdx = cleanedMainPart.indexOf('|')
+        evidence = pipeIdx !== -1 ? cleanedMainPart.substring(9, pipeIdx).trim() : cleanedMainPart.substring(9).trim()
+      }
+      
+      if (improvement) lines.push(`  💡 _${improvement}_`)
+      if (evidence && evidence !== "'NO EVIDENCE FOUND'") lines.push(`  📝 _${evidence}_`)
+      if (!improvement && !evidence) lines.push(`  _${s.reasoning}_`)
+    }
+    lines.push('')
     return lines
   })
 
@@ -481,10 +500,9 @@ async function sendCallToSlack(file, enrichedScores, rubricParams, agentName, du
   const footer    = permalink ? ['', `:paperclip: *Recording:* ${permalink}`] : []
 
   const text = [...header, ...paramLines, ...footer].join('\n')
-  await fetch(SLACK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+  
+  await supabase.functions.invoke('send-slack', {
+    body: { text, callId: file.name }
   }).catch(e => console.warn('Slack message failed:', e))
 }
 

@@ -40,10 +40,34 @@ function buildMessage(call, scores, rubric, config) {
   const ordered = rubric?.parameters?.length
     ? rubric.parameters.map(p => scores.find(s => s.parameter === p.name)).filter(Boolean)
     : scores
-  const scoreLines = ordered.map(s => {
+  const scoreLines = ordered.flatMap(s => {
     const p = Math.round(s.score / s.max_score * 100)
     const e = p >= 70 ? '✅' : p >= 50 ? '⚠️' : '❌'
-    return `  ${e} *${s.parameter}:* ${s.score}/${s.max_score} _(${p}%)_`
+    const lines = [`  ${e} *${s.parameter}:* ${s.score}/${s.max_score} _(${p}%)_`]
+    
+    if (s.reasoning) {
+      const impIdx = s.reasoning.indexOf('| IMPROVEMENT:')
+      let improvement = null
+      let mainPart = s.reasoning
+      if (impIdx !== -1) {
+        improvement = s.reasoning.substring(impIdx + 14).trim()
+        mainPart = s.reasoning.substring(0, impIdx).trim()
+      }
+      
+      let evidence = null
+      const cleanedMainPart = mainPart.replace(/^\[OVERRIDE\]\s*/, '')
+      if (cleanedMainPart.startsWith('EVIDENCE:')) {
+        const pipeIdx = cleanedMainPart.indexOf('|')
+        evidence = pipeIdx !== -1 ? cleanedMainPart.substring(9, pipeIdx).trim() : cleanedMainPart.substring(9).trim()
+      }
+      
+      if (improvement) lines.push(`    💡 _${improvement}_`)
+      if (evidence && evidence !== "'NO EVIDENCE FOUND'") lines.push(`    📝 _${evidence}_`)
+      if (!improvement && !evidence) lines.push(`    _${s.reasoning}_`)
+    }
+    
+    lines.push('')
+    return lines
   }).join('\n')
 
   const lines = [

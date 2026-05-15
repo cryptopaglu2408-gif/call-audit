@@ -90,7 +90,7 @@ function buildParamRubric(p: RubricParam): string {
 
   if (binary) {
     return (
-      `PARAMETER: ${p.name} — BINARY YES/NO (YES = ${p.max_score} pts, NO = 0 pts)\n` +
+      `PARAMETER: "${p.name}"\nTYPE: BINARY YES/NO (YES = ${p.max_score} pts, NO = 0 pts)\n` +
       `CRITERION: ${binary}\n` +
       `REASONING FORMAT: "EVIDENCE: '[exact quote]' | VERDICT: YES/NO | SCORE: ${p.max_score} or 0"`
     )
@@ -98,7 +98,7 @@ function buildParamRubric(p: RubricParam): string {
   if (categorical) {
     const levels = Object.entries(categorical).map(([k, v]) => `  ${k} — ${v}`).join('\n')
     return (
-      `PARAMETER: ${p.name} — CATEGORICAL (0–${p.max_score})\n` +
+      `PARAMETER: "${p.name}"\nTYPE: CATEGORICAL (0–${p.max_score})\n` +
       `LEVELS:\n${levels}\n` +
       `REASONING FORMAT: "EVIDENCE: '[exact quote or NO EVIDENCE]' | LEVEL CHOSEN: N — [level description] | SCORE: N"`
     )
@@ -106,13 +106,13 @@ function buildParamRubric(p: RubricParam): string {
   if (numeric) {
     const lines = numeric.map(([id, pts, desc]) => `  [${id}] +${pts} pts — ${desc}`).join('\n')
     return (
-      `PARAMETER: ${p.name} — NUMERIC (0–${p.max_score})\n` +
+      `PARAMETER: "${p.name}"\nTYPE: NUMERIC (0–${p.max_score})\n` +
       `SUB-CRITERIA (sum points for each YES):\n${lines}\n` +
       `REASONING FORMAT: "EVIDENCE: '[exact quote or NO EVIDENCE]' | [a] YES/NO [b] YES/NO [c] YES/NO [d] YES/NO [e] YES/NO | SCORE: N"`
     )
   }
-  const desc = p.description ? ` — ${p.description}` : ''
-  return `PARAMETER: ${p.name} — NUMERIC (0–${p.max_score})${desc}`
+  const desc = p.description ? `\nDESCRIPTION: ${p.description}` : ''
+  return `PARAMETER: "${p.name}"\nTYPE: NUMERIC (0–${p.max_score})${desc}`
 }
 
 function buildScoringPrompt(transcript: string, rubricParams: RubricParam[], durationSeconds: number | null): string {
@@ -133,8 +133,9 @@ You MUST work through these steps in order for each parameter. Do not skip any s
             Answer YES or NO for each. Do not infer, assume, or give credit for implied behaviour.
   STEP 3 — SCORE: Derive the score mechanically from Step 2 (sum of YES points, or binary verdict).
             The score must follow directly from Step 2 — do not adjust it based on overall call feel.
+  STEP 4 — IMPROVEMENT: If the score is less than the maximum possible score for this parameter, suggest 1-2 specific, actionable areas where the agent can improve, referencing the transcript. If the score is perfect, write "Perfect execution.".
 
-Place the output of all three steps in the "reasoning" field of each score entry.
+Place the output of all four steps in the "reasoning" field of each score entry.
 
 ## ABSOLUTE RULES
 1. Score ONLY what is LITERALLY SAID. Never award credit for likely, implied, or probable behaviour.
@@ -153,7 +154,7 @@ ${transcript}
 
 ## RESPONSE FORMAT
 Respond ONLY with valid JSON — no markdown fences, no extra text:
-{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: '...' | sub-criteria results | SCORE: N>"}]}
+{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: '...' | sub-criteria results | SCORE: N | IMPROVEMENT: ...>"}]}
 You must return exactly ${rubricParams.length} score objects — one per parameter above, using the exact parameter name shown.`
 }
 

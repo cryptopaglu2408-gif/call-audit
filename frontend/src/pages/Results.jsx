@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink, Search, X, Phone, Pencil, Check, RotateCcw } from 'lucide-react'
+import { ExternalLink, Search, X, Phone, Pencil, Check, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
 import PlayCallButton from '../components/PlayCallButton'
@@ -34,10 +34,47 @@ const PARAM_HINTS = {
   'Was Demo Scheduled ?': '0 = not attempted · 1 = mentioned but declined · 2 = callback booked · 3 = demo confirmed',
 }
 
+function parseReasoning(reasoning) {
+  if (!reasoning) return { improvement: null, evidence: null, full: null }
+  
+  const impIdx = reasoning.indexOf('| IMPROVEMENT:')
+  let improvement = null
+  let mainPart = reasoning
+  
+  if (impIdx !== -1) {
+    improvement = reasoning.substring(impIdx + 14).trim()
+    mainPart = reasoning.substring(0, impIdx).trim()
+  }
+  
+  // Extract evidence if it starts with EVIDENCE: (handle [OVERRIDE] prefix)
+  let evidence = null
+  const cleanedMainPart = mainPart.replace(/^\[OVERRIDE\]\s*/, '')
+  if (cleanedMainPart.startsWith('EVIDENCE:')) {
+    const pipeIdx = cleanedMainPart.indexOf('|')
+    if (pipeIdx !== -1) {
+      evidence = cleanedMainPart.substring(9, pipeIdx).trim()
+    } else {
+      evidence = cleanedMainPart.substring(9).trim()
+    }
+  }
+  
+  // If it's the old format without structured pipes, just use the whole thing as improvement or evidence
+  if (!improvement && !evidence) {
+    if (reasoning.includes('EVIDENCE:')) {
+      evidence = reasoning.replace('EVIDENCE:', '').trim()
+    } else {
+      improvement = reasoning
+    }
+  }
+  
+  return { improvement, evidence, full: reasoning }
+}
+
 function ScoreRow({ s, callId, onSaved }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal]         = useState(s.score)
   const [saving, setSaving]   = useState(false)
+  const [showEvidence, setShowEvidence] = useState(false)
 
   const isYesNo      = s.max_score === 2
   const isCategorical = s.max_score === 3
@@ -60,13 +97,15 @@ function ScoreRow({ s, callId, onSaved }) {
   }
 
   const hint = PARAM_HINTS[s.parameter]
+  const { improvement, evidence } = parseReasoning(s.reasoning)
+  const isPerfect = improvement === 'Perfect execution.'
 
   // ── Yes / No ──────────────────────────────────────────────────────────────
   if (isYesNo) {
     const isYes = s.score === s.max_score
     return (
       <div className="mb-4 group flex items-start justify-between gap-4 bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/20 hover:border-white/50 hover:bg-white/80 transition-all shadow-sm">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-gray-700">{s.parameter}</span>
             {s.reasoning?.startsWith('[OVERRIDE]') && (
@@ -74,8 +113,31 @@ function ScoreRow({ s, callId, onSaved }) {
             )}
           </div>
           {hint && <p className="text-[11px] font-medium text-gray-400 mt-0.5">{hint}</p>}
+          
+          {improvement && (
+            <div className={`text-[11px] font-medium mt-1.5 leading-relaxed p-2 rounded-lg border ${
+              isPerfect 
+                ? 'text-emerald-600 bg-emerald-50/50 border-emerald-100/50' 
+                : 'text-amber-600 bg-amber-50/50 border-amber-100/50'
+            }`}>
+              <span className="font-bold">{isPerfect ? 'Result:' : 'Areas for improvement:'}</span> {improvement}
+            </div>
+          )}
+          
+          {evidence && (
+            <div className="mt-1">
+              <button 
+                onClick={() => setShowEvidence(!showEvidence)} 
+                className="text-[10px] font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 focus:outline-none w-full text-left"
+              >
+                <span className="font-bold shrink-0">Evidence:</span>
+                <span className={showEvidence ? 'whitespace-normal' : 'truncate flex-1'}>{evidence}</span>
+                {showEvidence ? <ChevronUp size={10} className="shrink-0" /> : <ChevronDown size={10} className="shrink-0" />}
+              </button>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-start mt-1">
           {editing ? (
             <>
               <button onClick={() => setVal(0)}
@@ -111,7 +173,7 @@ function ScoreRow({ s, callId, onSaved }) {
     const level = DEMO_LEVELS[Math.min(s.score, 3)]
     return (
       <div className="mb-4 group flex items-start justify-between gap-4 bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/20 hover:border-white/50 hover:bg-white/80 transition-all shadow-sm">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-gray-700">{s.parameter}</span>
             {s.reasoning?.startsWith('[OVERRIDE]') && (
@@ -119,8 +181,31 @@ function ScoreRow({ s, callId, onSaved }) {
             )}
           </div>
           {hint && <p className="text-[11px] font-medium text-gray-400 mt-0.5">{hint}</p>}
+          
+          {improvement && (
+            <div className={`text-[11px] font-medium mt-1.5 leading-relaxed p-2 rounded-lg border ${
+              isPerfect 
+                ? 'text-emerald-600 bg-emerald-50/50 border-emerald-100/50' 
+                : 'text-amber-600 bg-amber-50/50 border-amber-100/50'
+            }`}>
+              <span className="font-bold">{isPerfect ? 'Result:' : 'Areas for improvement:'}</span> {improvement}
+            </div>
+          )}
+          
+          {evidence && (
+            <div className="mt-1">
+              <button 
+                onClick={() => setShowEvidence(!showEvidence)} 
+                className="text-[10px] font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 focus:outline-none w-full text-left"
+              >
+                <span className="font-bold shrink-0">Evidence:</span>
+                <span className={showEvidence ? 'whitespace-normal' : 'truncate flex-1'}>{evidence}</span>
+                {showEvidence ? <ChevronUp size={10} className="shrink-0" /> : <ChevronDown size={10} className="shrink-0" />}
+              </button>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-start mt-1">
           {editing ? (
             <>
               <div className="flex gap-1">
@@ -193,6 +278,29 @@ function ScoreRow({ s, callId, onSaved }) {
       <div className="h-2 bg-gray-200/60 rounded-full overflow-hidden">
         <div className={`h-full rounded-full bg-gradient-to-r ${gradient} transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
+      
+      {improvement && (
+        <div className={`text-[11px] font-medium mt-2 leading-relaxed p-2 rounded-lg border ${
+          isPerfect 
+            ? 'text-emerald-600 bg-emerald-50/50 border-emerald-100/50' 
+            : 'text-amber-600 bg-amber-50/50 border-amber-100/50'
+        }`}>
+          <span className="font-bold">{isPerfect ? 'Result:' : 'Areas for improvement:'}</span> {improvement}
+        </div>
+      )}
+      
+      {evidence && (
+        <div className="mt-1">
+          <button 
+            onClick={() => setShowEvidence(!showEvidence)} 
+            className="text-[10px] font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 focus:outline-none w-full text-left"
+          >
+            <span className="font-bold shrink-0">Evidence:</span>
+            <span className={showEvidence ? 'whitespace-normal' : 'truncate flex-1'}>{evidence}</span>
+            {showEvidence ? <ChevronUp size={10} className="shrink-0" /> : <ChevronDown size={10} className="shrink-0" />}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -205,14 +313,40 @@ export default function Results() {
   const [scoresLoading, setScoresLoading] = useState(false)
   const [search, setSearch]             = useState('')
   const [rubricOrder, setRubricOrder]   = useState([])
+  const [visibleCount, setVisibleCount] = useState(30)
+
+  const filtered = calls.filter(c =>
+    (c.metadata?.filename || '').toLowerCase().includes(search.toLowerCase()) ||
+    c.status.includes(search.toLowerCase())
+  )
+
+  function handleScroll(e) {
+    const { scrollTop, scrollHeight, clientHeight } = e.target
+    if (scrollHeight - scrollTop <= clientHeight + 50) {
+      setVisibleCount(prev => Math.min(prev + 30, filtered.length))
+    }
+  }
 
   useEffect(() => {
     Promise.all([
-      supabase.from('calls').select('id, status, created_at, duration_seconds, drive_link, metadata, transcript')
+      supabase.from('calls').select('id, status, created_at, duration_seconds, drive_link, metadata, transcript, scores(score, max_score)')
         .order('created_at', { ascending: false }).limit(500),
       supabase.from('rubrics').select('parameters').eq('is_active', true).limit(1),
-    ]).then(([{ data: c }, { data: r }]) => {
-      setCalls(c || [])
+    ]).then(([{ data: c, error: callError }, { data: r }]) => {
+      if (callError) {
+        console.error("Error fetching calls:", callError)
+      }
+      
+      const callsList = (c || []).map(call => {
+        let percentage = null
+        if (call.scores && call.scores.length > 0) {
+          const total = call.scores.reduce((a, s) => a + s.score / s.max_score, 0)
+          percentage = Math.round((total / call.scores.length) * 100)
+        }
+        return { ...call, percentage }
+      })
+      
+      setCalls(callsList)
       if (r?.[0]?.parameters) setRubricOrder(r[0].parameters.map(p => p.name))
       setLoading(false)
     })
@@ -240,10 +374,6 @@ export default function Results() {
     setScores(prev => prev.map(s => s.parameter === parameter ? { ...s, score: newScore, reasoning: s.reasoning ? `[OVERRIDE] ${s.reasoning}` : '[OVERRIDE] Manually adjusted.' } : s))
   }
 
-  const filtered = calls.filter(c =>
-    (c.metadata?.filename || '').toLowerCase().includes(search.toLowerCase()) ||
-    c.status.includes(search.toLowerCase())
-  )
 
   const totalScore = scores.length
     ? Math.round(scores.reduce((a,s) => a + s.score / s.max_score, 0) / scores.length * 100)
@@ -280,15 +410,15 @@ export default function Results() {
             />
           </div>
         </div>
-        <div className="overflow-y-auto flex-1 p-3 pb-24 space-y-1">
-          {filtered.map(c => {
+        <div className="overflow-y-auto flex-1 p-3 pb-24 space-y-1" onScroll={handleScroll}>
+          {filtered.slice(0, visibleCount).map(c => {
+            const agentName = c.metadata?.agent_name || 'Unknown Agent'
             const filename = c.metadata?.filename || `call-${c.id.slice(0,8)}`
             const dur      = c.duration_seconds ? `${(c.duration_seconds/60).toFixed(1)}m` : null
             const isActive = selected?.id === c.id
             const callIdShort = c.id.slice(0, 8).toUpperCase()
-            // Deterministic mock score for design (0-100)
-            const mockScore = (parseInt(c.id.slice(0, 2), 16) || 0) % 100
-            const progressColor = mockScore >= 70 ? 'bg-emerald-500' : mockScore >= 40 ? 'bg-amber-500' : 'bg-rose-500'
+            const score = c.percentage !== null ? c.percentage : 0
+            const progressColor = score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-500' : 'bg-rose-500'
             
             return (
               <button key={c.id} onClick={() => selectCall(c)}
@@ -303,7 +433,7 @@ export default function Results() {
                   <div className="min-w-0 flex-1">
                     <div className="flex justify-between items-start">
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-gray-900 truncate">{filename}</p>
+                        <p className="text-xs font-bold text-gray-900 truncate">{agentName}</p>
                         <p className="text-[10px] font-semibold text-gray-400">ID: {callIdShort}</p>
                       </div>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${
@@ -316,13 +446,17 @@ export default function Results() {
                       </span>
                     </div>
                     
-                    {/* Progress Bar (Complain style) */}
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full ${progressColor} rounded-full`} style={{ width: `${mockScore}%` }} />
+                    {/* Progress Bar */}
+                    {c.percentage !== null ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full ${progressColor} rounded-full`} style={{ width: `${c.percentage}%` }} />
+                        </div>
+                        <span className="text-[9px] font-bold text-gray-500 w-6 text-right">{c.percentage}%</span>
                       </div>
-                      <span className="text-[9px] font-bold text-gray-500 w-6 text-right">{mockScore}%</span>
-                    </div>
+                    ) : (
+                      <div className="h-1 mt-1"></div>
+                    )}
                     
                     <div className="flex items-center justify-between mt-1 text-[9px] font-semibold text-gray-400">
                       <span>{dur || '—'}</span>

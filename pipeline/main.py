@@ -153,26 +153,26 @@ def _build_param_rubric(p: dict) -> str:
 
     if binary:
         return (
-            f"PARAMETER: {p['name']} — BINARY YES/NO (YES = {p['max_score']} pts, NO = 0 pts)\n"
+            f"PARAMETER: \"{p['name']}\"\nTYPE: BINARY YES/NO (YES = {p['max_score']} pts, NO = 0 pts)\n"
             f"CRITERION: {binary}\n"
             f"REASONING FORMAT: \"EVIDENCE: '[exact quote]' | VERDICT: YES/NO | SCORE: {p['max_score']} or 0\""
         )
     if categorical:
         levels = "\n".join(f"  {k} — {v}" for k, v in categorical.items())
         return (
-            f"PARAMETER: {p['name']} — CATEGORICAL (0–{p['max_score']})\n"
+            f"PARAMETER: \"{p['name']}\"\nTYPE: CATEGORICAL (0–{p['max_score']})\n"
             f"LEVELS:\n{levels}\n"
             f"REASONING FORMAT: \"EVIDENCE: '[exact quote or NO EVIDENCE]' | LEVEL CHOSEN: N | SCORE: N\""
         )
     if numeric:
         lines = "\n".join(f"  [{cid}] +{pts} pts — {desc}" for cid, pts, desc in numeric)
         return (
-            f"PARAMETER: {p['name']} — NUMERIC (0–{p['max_score']})\n"
+            f"PARAMETER: \"{p['name']}\"\nTYPE: NUMERIC (0–{p['max_score']})\n"
             f"SUB-CRITERIA (sum points for each YES):\n{lines}\n"
             f"REASONING FORMAT: \"EVIDENCE: '[exact quote or NO EVIDENCE]' | [a] YES/NO [b] YES/NO ... | SCORE: N\""
         )
-    desc = f" — {p['description']}" if p.get("description") else ""
-    return f"PARAMETER: {p['name']} — NUMERIC (0–{p['max_score']}){desc}"
+    desc = f"\nDESCRIPTION: {p['description']}" if p.get("description") else ""
+    return f"PARAMETER: \"{p['name']}\"\nTYPE: NUMERIC (0–{p['max_score']}){desc}"
 
 # ── Clients ───────────────────────────────────────────────────────────────────
 supabase_client = sb.create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -356,7 +356,8 @@ def build_prompt(
         "            Answer YES or NO for each. Do not infer, assume, or give credit for implied behaviour.\n"
         "  STEP 3 — SCORE: Derive the score mechanically from Step 2 (sum of YES points, or binary verdict).\n"
         "            The score must follow directly from Step 2 — do not adjust based on overall call feel.\n\n"
-        "Place the output of all three steps in the \"reasoning\" field of each score entry.\n\n"
+        "  STEP 4 — IMPROVEMENT: If the score is less than the maximum possible score for this parameter, suggest 1-2 specific, actionable areas where the agent can improve, referencing the transcript. If the score is perfect, write \"Perfect execution.\".\n\n"
+        "Place the output of all four steps in the \"reasoning\" field of each score entry.\n\n"
         "## ABSOLUTE RULES\n"
         "1. Score ONLY what is LITERALLY SAID. Never award credit for likely, implied, or probable behaviour.\n"
         "2. Ambiguous or unclear evidence → score the LOWER possibility (conservative scoring).\n"
@@ -371,7 +372,7 @@ def build_prompt(
         + transcript + "\n\n"
         "## RESPONSE FORMAT\n"
         "Respond ONLY with valid JSON — no markdown fences, no extra text:\n"
-        '{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: \'...\' | sub-criteria results | SCORE: N>"}]}\n'
+        '{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: \'...\' | sub-criteria results | SCORE: N | IMPROVEMENT: ...>"}]}\n'
         f"You must return exactly {len(rubric_params)} score objects — one per parameter above, using the exact parameter name shown."
     )
 
@@ -495,7 +496,32 @@ def send_slack(
             lines.append(f"*{name}*: {score}/{mx}  {filled}{empty}")
 
         if s.get("reasoning"):
-            lines.append(f"  _{s['reasoning']}_")
+            reasoning = s["reasoning"]
+            imp_idx = reasoning.find("| IMPROVEMENT:")
+            improvement = None
+            main_part = reasoning
+
+            if imp_idx != -1:
+                improvement = reasoning[imp_idx + 14:].strip()
+                main_part = reasoning[:imp_idx].strip()
+            
+            evidence = None
+            cleaned_main = main_part.replace("[OVERRIDE]", "").strip()
+            if cleaned_main.startswith("EVIDENCE:"):
+                pipe_idx = cleaned_main.find("|")
+                if pipe_idx != -1:
+                    evidence = cleaned_main[9:pipe_idx].strip()
+                else:
+                    evidence = cleaned_main[9:].strip()
+            
+            if improvement:
+                lines.append(f"  💡 _{improvement}_")
+            if evidence and evidence != "'NO EVIDENCE FOUND'":
+                lines.append(f"  📝 _{evidence}_")
+            if not improvement and not evidence:
+                lines.append(f"  _{reasoning}_")
+
+        lines.append("")
 
     lines.append("")
     if file_permalink:

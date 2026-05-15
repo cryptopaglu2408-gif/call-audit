@@ -270,8 +270,9 @@ You MUST work through these steps in order for each parameter. Do not skip any s
             Answer YES or NO for each. Do not infer, assume, or give credit for implied behaviour.
   STEP 3 — SCORE: Derive the score mechanically from Step 2 (sum of YES points, or binary verdict).
             The score must follow directly from Step 2 — do not adjust it based on overall call feel.
+  STEP 4 — IMPROVEMENT: If the score is less than the maximum possible score for this parameter, suggest 1-2 specific, actionable areas where the agent can improve, referencing the transcript. If the score is perfect, write "Perfect execution.".
 
-Place the output of all three steps in the "reasoning" field of each score entry.
+Place the output of all four steps in the "reasoning" field of each score entry.
 
 ## ABSOLUTE RULES
 1. Score ONLY what is LITERALLY SAID. Never award credit for likely, implied, or probable behaviour.
@@ -290,7 +291,7 @@ ${transcript}
 
 ## RESPONSE FORMAT
 Respond ONLY with valid JSON — no markdown fences, no extra text:
-{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: '...' | sub-criteria results | SCORE: N>"}]}
+{"agent_name":"<first name or null>","scores":[{"parameter":"<exact parameter name>","score":<integer>,"reasoning":"<EVIDENCE: '...' | sub-criteria results | SCORE: N | IMPROVEMENT: ...>"}]}
 You must return exactly ${rubricParams.length} score objects — one per parameter above, using the exact parameter name shown.`
 }
 
